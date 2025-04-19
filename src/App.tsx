@@ -4,7 +4,6 @@ import type { FuseResult } from "fuse.js";
 import Fuse from "fuse.js";
 import { Item } from "./types";
 import "./App.css";
-import './vignette-scroll.css';
 import './sticky-table.css';
 import { Toolbar } from "./Toolbar";
 import { Modal } from "./Modal";
@@ -275,6 +274,17 @@ function App() {
 
   function handleInventoryDragEnd(result: DropResult) {
     if (!result.destination) return;
+    // Defensive: ensure ownedItems is up to date and indices are valid
+    if (
+      !Array.isArray(ownedItems) ||
+      result.source.index < 0 ||
+      result.source.index >= ownedItems.length ||
+      result.destination.index < 0 ||
+      result.destination.index > ownedItems.length
+    ) {
+      // Optionally log or show a warning
+      return;
+    }
     const reordered = Array.from(ownedItems);
     const [removed] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, removed);
@@ -428,7 +438,7 @@ function App() {
               <button className="add-btn" onClick={openAddModal}>Add Item</button>
             </div>
             <div
-              className="table-responsive vignette-scroll"
+              className="table-responsive sticky-table"
               ref={tableContainerRef}
               style={{
                 maxHeight: 'calc(100vh - 170px)',

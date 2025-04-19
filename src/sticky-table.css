@@ -1,0 +1,9 @@
+.sticky-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #232323;
+  /* match your table header bg */
+  box-shadow: 0 2px 4px -2px rgba(0,0,0,0.08);
+  transition: box-shadow 0.2s;
+}

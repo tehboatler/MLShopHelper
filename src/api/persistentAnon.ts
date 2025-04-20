@@ -30,21 +30,16 @@ export async function createPersistentAnonUser(): Promise<{ user: Models.User<an
   return { user, secret };
 }
 
-export async function loginWithPersistentSecret(secret: string): Promise<{ user: Models.User<any>, secret: string } | null> {
+export async function loginWithPersistentSecret(secret: string): Promise<{ userId: string, secret: string } | null> {
   // 1. Lookup mapping
   const docs = await databases.listDocuments(databaseId, anonLinksCollectionId, [
     Query.equal('secret', secret)
   ]);
   if (!docs.documents.length) return null;
   const userId = docs.documents[0].userId;
-  // 2. Create a new anonymous session
-  await account.createAnonymousSession();
-  // 3. Use the persistent userId for all app data (not the new session's user)
-  // 4. Optionally, update preferences or merge data if needed
-  const user = await account.get();
-  // Note: the current session's user is not the persistent user, but for all app data you should use userId from mapping
-  // If you want to show the persistent user's info, you will need to query as admin or via a backend function
-  return { user: { ...user, $id: userId }, secret };
+  // 2. Do NOT create a new anonymous session!
+  // 3. Return the persistent userId
+  return { userId, secret };
 }
 
 // Utility to get the persistent userId for the current secret
@@ -54,4 +49,35 @@ export async function getPersistentUserId(secret: string): Promise<string | null
   ]);
   if (!docs.documents.length) return null;
   return docs.documents[0].userId;
+}
+
+// Fetch persistent anonymous user document by userId or secret
+export async function getPersistentAnonUserById(userId: string): Promise<any | null> {
+  const docs = await databases.listDocuments(databaseId, anonLinksCollectionId, [
+    Query.equal('userId', userId)
+  ]);
+  if (!docs.documents.length) return null;
+  return docs.documents[0];
+}
+
+export async function getPersistentAnonUserBySecret(secret: string): Promise<any | null> {
+  const docs = await databases.listDocuments(databaseId, anonLinksCollectionId, [
+    Query.equal('secret', secret)
+  ]);
+  if (!docs.documents.length) return null;
+  return docs.documents[0];
+}
+
+// Increment or decrement karma for a user by userId
+export async function updateUserKarma(userId: string, delta: number): Promise<number> {
+  // Get user doc from anon_links collection
+  const docs = await databases.listDocuments(databaseId, anonLinksCollectionId, [
+    Query.equal('userId', userId)
+  ]);
+  if (!docs.documents.length) throw new Error('User not found');
+  const userDoc = docs.documents[0];
+  const currentKarma = typeof userDoc.karma === 'number' ? userDoc.karma : 0;
+  const newKarma = currentKarma + delta;
+  await databases.updateDocument(databaseId, anonLinksCollectionId, userDoc.$id, { karma: newKarma });
+  return newKarma;
 }

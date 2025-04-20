@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { Modal } from "./Modal";
 
 interface StockDialogProps {
   open: boolean;
   onClose: () => void;
-  onStock: (characterId: string, amount: number) => void;
-  characters: { id: string; name: string; shop: { itemCounts: Record<number, number> } }[];
+  onStock: (characterId: string, itemId: string, amount: number) => void;
+  characters: { id: string; name: string; shop: { itemCounts: Record<string, number> } }[];
   itemName: string;
-  itemId: number;
+  itemId: string;
   defaultStock: number;
 }
 
@@ -36,11 +37,8 @@ export function StockDialog({ open, onClose, onStock, characters, itemName, item
   }
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: '#000a', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div style={{ background: '#232323', borderRadius: 10, padding: 28, minWidth: 340, boxShadow: '0 2px 16px #0006', color: '#fff' }}>
+    <Modal open={open} onClose={onClose} width={420} title={`Adjust Stock for "${itemName}"`}>
+      <div>
         <h3 style={{ margin: 0, marginBottom: 18, fontSize: 20 }}>Adjust Stock for "{itemName}"</h3>
         <div style={{ marginBottom: 18 }}>
           <label style={{ display: 'block', marginBottom: 8 }}>Character:</label>
@@ -60,9 +58,9 @@ export function StockDialog({ open, onClose, onStock, characters, itemName, item
         </div>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ background: 'none', border: '1px solid #888', color: '#fff', borderRadius: 4, padding: '6px 18px', fontSize: 15, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={() => onStock(characterId, amount)} style={{ background: '#2d8cff', border: 'none', color: '#fff', borderRadius: 4, padding: '6px 18px', fontSize: 15, cursor: 'pointer', fontWeight: 600 }}>Set Stock</button>
+          <button onClick={() => onStock(characterId, itemId, amount)} style={{ background: '#2d8cff', border: 'none', color: '#fff', borderRadius: 4, padding: '6px 18px', fontSize: 15, cursor: 'pointer', fontWeight: 600 }}>Set Stock</button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

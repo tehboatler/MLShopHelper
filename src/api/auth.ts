@@ -24,7 +24,7 @@ export async function createJWT() {
 
 
 export async function logout() {
-  return account.deleteSession("current");
+  await account.deleteSession("current");
 }
 
 // Create an anonymous session and return both the user and session info

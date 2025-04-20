@@ -6,35 +6,40 @@ interface SellModalProps {
   onClose: () => void;
   onSell: (amount: number, price: number, markUnowned?: boolean) => void;
   itemName: string;
+  userPrice?: number;
   defaultPrice?: number;
 }
 
-export function SellModal({ open, onClose, onSell, itemName, defaultPrice }: SellModalProps) {
+export function SellModal({ open, onClose, onSell, itemName, userPrice, defaultPrice }: SellModalProps) {
+  const initialPrice = userPrice !== undefined ? String(userPrice) : (defaultPrice !== undefined ? String(defaultPrice) : "");
   const [amount, setAmount] = useState(1);
-  const [price, setPrice] = useState(defaultPrice !== undefined ? String(defaultPrice) : "");
+  const [price, setPrice] = useState(initialPrice);
   const [error, setError] = useState("");
 
-  // Update price when modal opens or defaultPrice changes
   useEffect(() => {
-    if (open) setPrice(defaultPrice !== undefined ? String(defaultPrice) : "");
-  }, [open, defaultPrice]);
+    setPrice(initialPrice);
+  }, [userPrice, defaultPrice, open]);
 
   function handleSubmit(e: React.FormEvent, markUnowned = false) {
     e.preventDefault();
     const amt = Number(amount);
     const prc = Number(price);
+    console.debug('[SellModal] handleSubmit called', { amount, price, amt, prc, markUnowned });
     if (!amt || amt < 1) {
       setError("Enter a valid amount");
+      console.warn('[SellModal] Invalid amount:', amt);
       return;
     }
     if (!prc || prc <= 0) {
       setError("Enter a valid price");
+      console.warn('[SellModal] Invalid price:', prc);
       return;
     }
     setError("");
+    console.info('[SellModal] Calling onSell', { amt, prc, markUnowned });
     onSell(amt, prc, markUnowned);
     setAmount(1);
-    setPrice(defaultPrice !== undefined ? String(defaultPrice) : "");
+    setPrice(initialPrice);
   }
 
   return (

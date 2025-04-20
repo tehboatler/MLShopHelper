@@ -8,9 +8,10 @@ interface InventoryContextMenuProps {
   onPriceHistory: () => void;
   onRecordSale: () => void;
   onDelete?: () => void;
+  deleteLabel?: string;
 }
 
-export function InventoryContextMenu({ x, y, onClose, onAdjustStock, onPriceHistory, onRecordSale, onDelete }: InventoryContextMenuProps) {
+export function InventoryContextMenu({ x, y, onClose, onAdjustStock, onPriceHistory, onRecordSale, onDelete, deleteLabel }: InventoryContextMenuProps) {
   React.useEffect(() => {
     const handle = (e: MouseEvent) => {
       onClose();
@@ -87,7 +88,7 @@ export function InventoryContextMenu({ x, y, onClose, onAdjustStock, onPriceHist
             onClose();
           }}
         >
-          Delete Item
+          {deleteLabel ?? 'Delete Item'}
         </div>
       )}
     </div>

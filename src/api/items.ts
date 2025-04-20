@@ -1,7 +1,7 @@
 import { databases } from "../lib/appwrite";
 
 const databaseId = import.meta.env.VITE_APPWRITE_DATABASE!;
-const collectionId = import.meta.env.VITE_APPWRITE_COLLECTION!;
+const collectionId = import.meta.env.VITE_APPWRITE_ITEMS_COLLECTION!;
 
 export async function getItems() {
   return databases.listDocuments(databaseId, collectionId);

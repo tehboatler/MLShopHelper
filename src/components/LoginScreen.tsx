@@ -39,11 +39,11 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     try {
       const result = await loginWithPersistentSecret(persistentSecret);
       if (result) {
-        setUserId(result.user.$id);
+        setUserId(result.userId);
         setSavedPersistentSecret(result.secret);
         setShowSecretPrompt(true);
         localStorage.setItem('persistentSecret', result.secret);
-        localStorage.setItem('persistentUserId', result.user.$id);
+        localStorage.setItem('persistentUserId', result.userId);
         onLogin();
       } else {
         setError("Invalid secret or user not found.");

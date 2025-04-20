@@ -8,7 +8,7 @@ interface ToastProps {
 // Use named export for consistency
 export const Toast: React.FC<ToastProps> = ({ msg, visible }) => {
   if (!visible) {
-    console.log('[Toast] not visible, returning null');
+    // console.log('[Toast] not visible, returning null');
     return null;
   }
   console.log('[Toast] rendering with msg:', msg);

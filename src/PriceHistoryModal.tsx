@@ -3,7 +3,7 @@ import { Modal } from "./Modal";
 import { ChangePriceModal } from "./ChangePriceModal";
 import { getPriceHistory } from "./api/priceHistory";
 import { getIGNForUserId } from "./api/anonLinks";
-import { getPersistentAnonUserById } from "./api/persistentAnon";
+import { getPersistentAnonUsersInfoBatch } from "./api/persistentAnon";
 import { updateUserKarma } from "./api/persistentAnon";
 import { downvotePriceHistoryEntry } from "./api/priceHistory";
 import Plot from 'react-plotly.js';
@@ -31,29 +31,34 @@ function formatDate(date: string, format?: string): string {
   return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
 }
 
-// --- batching and caching for user info ---
-const userInfoCache: Record<string, { ign?: string; karma?: number }> = {};
+// Helper: persistent cache for user info
+function getUserInfoCache() {
+  try {
+    return JSON.parse(localStorage.getItem('userInfoCache') || '{}');
+  } catch {
+    return {};
+  }
+}
+function setUserInfoCache(cache: Record<string, { ign?: string, karma?: number }>) {
+  localStorage.setItem('userInfoCache', JSON.stringify(cache));
+}
 
+// --- batching and caching for user info ---
 async function batchFetchUserInfo(userIds: string[]): Promise<Record<string, { ign?: string; karma?: number }>> {
-  console.log('[PriceHistoryModal] batchFetchUserInfo called with:', userIds);
-  const uncached = userIds.filter(id => !userInfoCache[id]);
-  const results: Record<string, { ign?: string; karma?: number }> = {};
-  await Promise.all(uncached.map(async (userId) => {
-    if (!userId) return;
-    const [ign, userDoc] = await Promise.all([
-      getIGNForUserId(userId),
-      getPersistentAnonUserById(userId)
-    ]);
-    console.log('[PriceHistoryModal] batchFetchUserInfo fetched:', { userId, ign, userDoc });
-    userInfoCache[userId] = {
-      ign: ign || undefined,
-      karma: userDoc && typeof userDoc.karma === 'number' ? userDoc.karma : undefined
-    };
-  }));
+  // Use persistent cache
+  let cache = getUserInfoCache();
+  const uncached = userIds.filter(id => !cache[id]);
+  let results: Record<string, { ign?: string; karma?: number }> = {};
+  if (uncached.length > 0) {
+    // Batch fetch missing user info
+    const fetched = await getPersistentAnonUsersInfoBatch(uncached);
+    // Merge into cache
+    cache = { ...cache, ...fetched };
+    setUserInfoCache(cache);
+  }
   userIds.forEach(id => {
-    results[id] = userInfoCache[id] || {};
+    results[id] = cache[id] || {};
   });
-  console.log('[PriceHistoryModal] batchFetchUserInfo results:', results);
   return results;
 }
 

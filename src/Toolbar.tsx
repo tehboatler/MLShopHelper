@@ -10,9 +10,10 @@ interface ToolbarProps {
   ign: string;
   compactMode: boolean;
   setCompactMode: (val: boolean) => void;
+  userKarma: number | null;
 }
 
-export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode }: ToolbarProps) {
+export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, userKarma }: ToolbarProps) {
   const [showUserModal, setShowUserModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [persistentSecret, setPersistentSecret] = useState<string | null>(null);
@@ -43,8 +44,7 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode }:
 
   return (
     <header className="toolbar">
-      <div className="toolbar-appname">mlshophelper</div>
-      <div className="toolbar-actions">
+      <div className="toolbar-actions" style={{ width: 'auto', float: 'left', display: 'flex', flexDirection: 'row', alignItems: 'space-between' }}>
         <Dropdown label="User">
           <div className="dropdown-item" onClick={onSetIGN}>Set IGN</div>
           <div className="dropdown-item" style={{ cursor: "default", color: "#888" }}>IGN: <b>{ign || "Not set"}</b></div>
@@ -69,6 +69,11 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode }:
           </div>
         </Dropdown>
       </div>
+      <div className="karma-toolbar-display" style={{ float: 'right', display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 16 }}>
+        <img src="/placeholder-sell.png" alt="Karma" style={{ width: 22, height: 22, objectFit: 'contain', filter: 'grayscale(0.2)' }} />
+        <span style={{ color: '#ffb700', fontWeight: 600, fontSize: 16, whiteSpace: 'nowrap' }}>{userKarma !== null ? userKarma : '--'}</span>
+      </div>
+      <div style={{ clear: 'both' }} />
       {/* User Info Modal */}
       {showUserModal && (
         <div className="modal-backdrop modal-fade-in" style={{ zIndex: 3000 }} onClick={() => setShowUserModal(false)}>

@@ -81,3 +81,33 @@ export async function updateUserKarma(userId: string, delta: number): Promise<nu
   await databases.updateDocument(databaseId, anonLinksCollectionId, userDoc.$id, { karma: newKarma });
   return newKarma;
 }
+
+/**
+ * Batch fetch persistent anonymous user info (IGN, karma) for multiple userIds.
+ * @param userIds Array of user IDs to fetch info for.
+ * @returns Map of userId to { ign, karma }
+ */
+export async function getPersistentAnonUsersInfoBatch(userIds: string[]): Promise<Record<string, { ign?: string, karma?: number }>> {
+  if (!userIds.length) return {};
+  const chunkSize = 100;
+  const chunks: string[][] = [];
+  for (let i = 0; i < userIds.length; i += chunkSize) {
+    chunks.push(userIds.slice(i, i + chunkSize));
+  }
+  let allDocs: any[] = [];
+  for (const chunk of chunks) {
+    const res = await databases.listDocuments(databaseId, anonLinksCollectionId, [
+      Query.equal('userId', chunk),
+      Query.limit(1000)
+    ]);
+    allDocs = allDocs.concat(res.documents);
+  }
+  const infoMap: Record<string, { ign?: string, karma?: number }> = {};
+  for (const doc of allDocs) {
+    infoMap[doc.userId] = {
+      ign: doc.user_ign || undefined,
+      karma: typeof doc.karma === 'number' ? doc.karma : undefined
+    };
+  }
+  return infoMap;
+}

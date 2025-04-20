@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useReducer } from "react";
 import type { FuseResult } from "fuse.js";
 import Fuse from "fuse.js";
 import { Item, Character } from "./types";
@@ -21,7 +21,7 @@ import TitleBar from "./TitleBar";
 import React from "react";
 import { getCurrentUser } from "./api/auth";
 import { getItems, addItem, updateItem, deleteItem } from "./api/items";
-import { addPriceHistoryEntry, getPriceHistory, getPriceHistoryForUser, getLatestUserPriceEntry, getLatestSoldEntry, getLatestUserPriceEntriesBatch } from "./api/priceHistory";
+import { addPriceHistoryEntry, getPriceHistory, getPriceHistoryForUser, getLatestUserPriceEntry, getLatestSoldEntry, getLatestUserPriceEntriesBatch, getLatestSoldEntriesBatch } from "./api/priceHistory";
 import { getIGNForUserId, setIGNForUserId } from "./api/anonLinks";
 import LoginScreen from "./components/LoginScreen";
 import InventoryTable from "./InventoryTable";
@@ -52,15 +52,80 @@ export default function App() {
   const [userKarma, setUserKarma] = useState<number | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
-  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [editing, setEditing] = useState<Item | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalIGN, setModalIGN] = useState(false);
-  const [modalAbout, setModalAbout] = useState(false);
+
+  // --- Local caching for items ---
+  // Try to restore items from localStorage on mount
+  useEffect(() => {
+    const cached = localStorage.getItem('cachedItems');
+    if (cached) {
+      try {
+        const { data, ts } = JSON.parse(cached);
+        // Consider data stale if older than 24 hours
+        if (data && ts && Date.now() - ts < 24 * 60 * 60 * 1000) {
+          setItems(data);
+        }
+      } catch {}
+    }
+  }, []);
+
+  // When items are updated via fetch, update cache
+  useEffect(() => {
+    if (items && items.length > 0) {
+      localStorage.setItem('cachedItems', JSON.stringify({ data: items, ts: Date.now() }));
+    }
+  }, [items]);
+
+  // --- useReducer for modal state ---
+  type ModalState = {
+    open: boolean;
+    ign: boolean;
+    about: boolean;
+    editingItem: Item | null;
+    ignInput: string;
+    name: string;
+    price: string;
+  };
+  const initialModalState: ModalState = {
+    open: false,
+    ign: false,
+    about: false,
+    editingItem: null,
+    ignInput: "",
+    name: "",
+    price: "",
+  };
+  type ModalAction =
+    | { type: 'OPEN_EDIT'; item: Item | null }
+    | { type: 'OPEN_IGN' }
+    | { type: 'OPEN_ABOUT' }
+    | { type: 'CLOSE' }
+    | { type: 'SET_IGN_INPUT'; value: string }
+    | { type: 'SET_NAME'; value: string }
+    | { type: 'SET_PRICE'; value: string };
+  function modalReducer(state: ModalState, action: ModalAction): ModalState {
+    switch (action.type) {
+      case 'OPEN_EDIT':
+        return { ...state, open: true, editingItem: action.item };
+      case 'OPEN_IGN':
+        return { ...state, ign: true };
+      case 'OPEN_ABOUT':
+        return { ...state, about: true };
+      case 'CLOSE':
+        return { ...initialModalState };
+      case 'SET_IGN_INPUT':
+        return { ...state, ignInput: action.value };
+      case 'SET_NAME':
+        return { ...state, name: action.value };
+      case 'SET_PRICE':
+        return { ...state, price: action.value };
+      default:
+        return state;
+    }
+  }
+  const [modalState, dispatchModal] = useReducer(modalReducer, initialModalState);
+
   const [ign, setIGN] = useState<string>("");
-  const [ignInput, setIGNInput] = useState("");
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: Item | null }>({ x: 0, y: 0, item: null });
   const [priceHistoryModal, setPriceHistoryModal] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
@@ -192,17 +257,6 @@ export default function App() {
 
   useEffect(() => {
     if (loggedIn === true) {
-      if (!search) {
-        setFilteredItems(items);
-      } else {
-        const fuse = new Fuse(items, { keys: ["name"], threshold: 0.4 });
-        setFilteredItems(fuse.search(search).map((r) => (r as FuseResult<Item>).item));
-      }
-    }
-  }, [search, items, loggedIn]);
-
-  useEffect(() => {
-    if (loggedIn === true) {
       localStorage.setItem("round50k", String(round50k));
     }
   }, [round50k, loggedIn]);
@@ -223,10 +277,11 @@ export default function App() {
       let cancelled = false;
       async function fetchStats() {
         const stats: Record<string, { recent?: PriceHistoryEntry }> = {};
-        const entries = await Promise.all(items.map(item => getLatestSoldEntry(item.$id)));
-        items.forEach((item, idx) => {
-          if (entries[idx]) {
-            stats[item.$id] = { recent: entries[idx] };
+        // Batch fetch all latest sold entries for all items
+        const latestMap = await getLatestSoldEntriesBatch(items.map(item => item.$id));
+        items.forEach(item => {
+          if (latestMap.has(item.$id)) {
+            stats[item.$id] = { recent: latestMap.get(item.$id) };
           } else {
             stats[item.$id] = {};
           }
@@ -256,7 +311,6 @@ export default function App() {
       getIGNForUserId(persistentUserId).then((ign) => {
         console.log('[IGN DEBUG] Result from getIGNForUserId:', ign);
         setIGN(ign || "");
-        setIGNInput(ign || "");
       }).catch(err => {
         console.error('[IGN DEBUG] Error fetching IGN:', err);
       });
@@ -285,17 +339,27 @@ export default function App() {
     return <LoginScreen onLogin={() => setLoggedIn(true)} />;
   }
 
+  // --- Memoized Fuse instance and filteredItems ---
+  const fuse = useMemo(() => new Fuse(items, { keys: ["name", "notes"] }), [items]);
+  const filteredItems = useMemo(() => {
+    if (!search) return items;
+    return fuse.search(search).map(result => result.item);
+  }, [search, fuse, items]);
+
   // --- Rest of App logic and rendering ---
   async function fetchItems() {
     try {
       const result = await getItems();
       // Appwrite returns { documents: [...] }
-      setItems(result.documents.map((doc: any) => ({
+      const mapped = result.documents.map((doc: any) => ({
         ...doc,
         id: doc.$id,
         current_selling_price: doc.price ?? doc.current_selling_price ?? 0,
         priceHistory: doc.priceHistory || [],
-      })));
+      }));
+      setItems(mapped);
+      // Update cache immediately after fetch
+      localStorage.setItem('cachedItems', JSON.stringify({ data: mapped, ts: Date.now() }));
     } catch (err) {
       showToast(`Failed to fetch items: ${err?.toString() || err}`);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -306,23 +370,20 @@ export default function App() {
   async function handleAddOrEdit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      if (editing) {
-        await updateItem(editing.$id, {
-          name,
-          price: parseFloat(price),
-          notes: editing.notes,
+      if (modalState.editingItem) {
+        await updateItem(modalState.editingItem.$id, {
+          name: modalState.name,
+          price: parseFloat(modalState.price),
+          notes: modalState.editingItem.notes,
         });
       } else {
         await addItem({
-          name,
-          price: parseFloat(price),
+          name: modalState.name,
+          price: parseFloat(modalState.price),
           notes: '',
         });
       }
-      setModalOpen(false);
-      setName("");
-      setPrice("");
-      setEditing(null);
+      dispatchModal({ type: 'CLOSE' });
       fetchItems();
     } catch (err: any) {
       showToast(`Error: ${err?.toString() || err}`);
@@ -497,9 +558,9 @@ export default function App() {
       showToast('Persistent user ID not found. Please log in again.');
       return;
     }
-    await setIGNForUserId(persistentUserId, ignInput);
-    setIGN(ignInput);
-    setModalIGN(false);
+    await setIGNForUserId(persistentUserId, modalState.ignInput);
+    setIGN(modalState.ignInput);
+    dispatchModal({ type: 'CLOSE' });
   }
 
   function handleFullDeleteInventoryItem() {
@@ -542,7 +603,7 @@ export default function App() {
     const removedItem = items.find(i => i.$id === itemId);
     if (removedItem) itemName = removedItem.name;
     // Update filteredItems by removing the deleted item
-    setFilteredItems(prev => prev.filter(i => i.$id !== itemId));
+    // setFilteredItems(prev => prev.filter(i => i.$id !== itemId));
     console.log('[Delete] setFilteredItems: filtered', itemId);
     showToast(itemName ? `[${itemName}] removed from store` : `Item removed from store`);
     console.log('[Delete] setToast: show');
@@ -557,8 +618,7 @@ export default function App() {
   }
 
   // Filtering and sorting logic
-  const filteredAndSortedItems = items
-    .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
+  const filteredAndSortedItems = filteredItems
     .sort((a, b) => {
       let cmp = 0;
       if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
@@ -581,16 +641,14 @@ export default function App() {
     <UISettingsContext.Provider value={{ round50k, showUnsold, setRound50k, setShowUnsold, compactMode, setCompactMode }}>
       <TitleBar />
       <Toolbar
-        onSetIGN={() => setModalIGN(true)}
-        onAbout={() => setModalAbout(true)}
+        onSetIGN={() => dispatchModal({ type: 'OPEN_IGN' })}
+        onAbout={() => dispatchModal({ type: 'OPEN_ABOUT' })}
         ign={ign}
         compactMode={compactMode}
         setCompactMode={setCompactMode}
+        userKarma={userKarma}
       />
-      <div className="karma-toolbar-display" style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16, position: 'absolute', left: 170, top: 13 }}>
-        <img src="/placeholder-sell.png" alt="Karma" style={{ width: 22, height: 22, objectFit: 'contain', filter: 'grayscale(0.2)' }} />
-        <span style={{ color: '#ffb700', fontWeight: 600, fontSize: 16 }}>{userKarma !== null ? userKarma : '--'}</span>
-      </div>
+      {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
       <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 32 }}>
         {addCharacterPrompt && (
           <div style={{
@@ -628,10 +686,10 @@ export default function App() {
           {/* Main Content */}
           <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 /* matches inventory panel's right padding */ }}>
             <InventoryTable
-              filteredItems={filteredAndSortedItems}
+              filteredItems={filteredItems}
               search={search}
               setSearch={setSearch}
-              setModalOpen={setModalOpen}
+              setModalOpen={() => dispatchModal({ type: 'OPEN_EDIT', item: null })}
               tableContainerRef={tableContainerRef}
               tableScrollTop={tableScrollTop}
               sortKey={sortKey}
@@ -651,12 +709,12 @@ export default function App() {
           </div>
         </div>
         <Toast msg={toast.msg} visible={toast.visible} />
-        <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
-          <h2>{editing ? "Edit Item" : "Add Item"}</h2>
+        <Modal open={modalState.open} onClose={() => dispatchModal({ type: 'CLOSE' })}>
+          <h2>{modalState.editingItem ? "Edit Item" : "Add Item"}</h2>
           <form onSubmit={handleAddOrEdit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <ItemNameAutocomplete
-              value={name}
-              onChange={setName}
+              value={modalState.name}
+              onChange={(value) => dispatchModal({ type: 'SET_NAME', value })}
               placeholder="Item name"
               required
               autoFocus
@@ -664,42 +722,42 @@ export default function App() {
               style={{ width: "100%", boxSizing: "border-box" }}
             />
             <input
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              value={modalState.price}
+              onChange={(e) => dispatchModal({ type: 'SET_PRICE', value: e.target.value })}
               placeholder="Current Price"
               type="number"
               min="0"
-              step="0.01"
+              step="any"
               required
               style={{ width: "100%", boxSizing: "border-box" }}
             />
-            {items.some(i => i.name.trim().toLowerCase() === name.trim().toLowerCase()) && !editing && (
+            {items.some(i => i.name.trim().toLowerCase() === modalState.name.trim().toLowerCase()) && !modalState.editingItem && (
               <div style={{ color: '#2d8cff', fontWeight: 500, fontSize: 15, marginTop: -6 }}>
                 This item already exists and cannot be added again.
               </div>
             )}
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button type="submit" disabled={items.some(i => i.name.trim().toLowerCase() === name.trim().toLowerCase()) && !editing}>Save</button>
-              <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
+              <button type="submit" disabled={items.some(i => i.name.trim().toLowerCase() === modalState.name.trim().toLowerCase()) && !modalState.editingItem}>Save</button>
+              <button type="button" onClick={() => dispatchModal({ type: 'CLOSE' })}>Cancel</button>
             </div>
           </form>
         </Modal>
-        <Modal open={modalIGN} onClose={() => setModalIGN(false)}>
+        <Modal open={modalState.ign} onClose={() => dispatchModal({ type: 'CLOSE' })}>
           <h2>Set In-Game Name</h2>
           <form onSubmit={handleSetIGN} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <input
-              value={ignInput}
-              onChange={e => setIGNInput(e.target.value)}
+              value={modalState.ignInput}
+              onChange={(e) => dispatchModal({ type: 'SET_IGN_INPUT', value: e.target.value })}
               placeholder="Enter your IGN"
               autoFocus
             />
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
               <button type="submit">Save</button>
-              <button type="button" onClick={() => setModalIGN(false)}>Cancel</button>
+              <button type="button" onClick={() => dispatchModal({ type: 'CLOSE' })}>Cancel</button>
             </div>
           </form>
         </Modal>
-        <Modal open={modalAbout} onClose={() => setModalAbout(false)}>
+        <Modal open={modalState.about} onClose={() => dispatchModal({ type: 'CLOSE' })}>
           <h2>About</h2>
           <p>Inventory Tracker v0.1<br />Cross-platform desktop app for tracking game items.<br />Built with Tauri + React.</p>
         </Modal>
@@ -712,7 +770,7 @@ export default function App() {
             {
               label: "Edit",
               icon: <span aria-hidden="true">✎</span>,
-              onClick: () => setEditing(contextMenu.item!)
+              onClick: () => dispatchModal({ type: 'OPEN_EDIT', item: contextMenu.item! })
             },
             {
               label: "Remove from Store",

@@ -201,3 +201,40 @@ export async function getLatestUserPriceEntriesBatch(itemIds: string[], userId: 
   }
   return latestMap;
 }
+
+/**
+ * Batch fetch the latest sold price history entry for each item.
+ * @param itemIds Array of item IDs to fetch for.
+ * @returns Map of itemId to latest sold PriceHistoryEntry.
+ */
+export async function getLatestSoldEntriesBatch(itemIds: string[]): Promise<Map<string, PriceHistoryEntry>> {
+  if (!itemIds.length) return new Map();
+  const chunkSize = 100;
+  const chunks: string[][] = [];
+  for (let i = 0; i < itemIds.length; i += chunkSize) {
+    chunks.push(itemIds.slice(i, i + chunkSize));
+  }
+  let allEntries: any[] = [];
+  for (const chunk of chunks) {
+    const queries = [
+      Query.equal('itemId', chunk),
+      Query.equal('sold', true),
+      Query.orderDesc('date'),
+      Query.limit(1000)
+    ];
+    try {
+      const res = await databases.listDocuments(databaseId, collectionId, queries);
+      allEntries = allEntries.concat(res.documents as any);
+    } catch (err) {
+      console.error(`[getLatestSoldEntriesBatch] Error fetching chunk:`, err);
+    }
+  }
+  // Map itemId to latest sold entry (first seen in date-desc order)
+  const latestMap = new Map<string, PriceHistoryEntry>();
+  for (const entry of allEntries) {
+    if (!latestMap.has(entry.itemId)) {
+      latestMap.set(entry.itemId, entry);
+    }
+  }
+  return latestMap;
+}

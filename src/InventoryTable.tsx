@@ -150,6 +150,11 @@ export default function InventoryTable({
   const statKeys = ['p25', 'p50', 'p75', 'avg'] as const;
   type StatKey = typeof statKeys[number];
 
+  // Limit visible items to 7 for performance, unless searching
+  const visibleRows = search.trim().length > 0
+    ? table.getRowModel().rows
+    : table.getRowModel().rows.slice(0, 7);
+
   return (
     <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 }}>
       <div className="search-row">
@@ -186,7 +191,7 @@ export default function InventoryTable({
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row, i) => (
+            {visibleRows.map((row, i) => (
               <React.Fragment key={row.id}>
                 <tr
                   key={row.id}

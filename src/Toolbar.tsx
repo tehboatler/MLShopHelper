@@ -1,6 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import React from "react";
+import React, { useState } from "react";
 import { Dropdown } from "./Dropdown";
+import { getCurrentUser, createAnonymousSessionWithSessionId, logout } from "./api/auth";
+import { getPersistentUserId } from './api/persistentAnon';
 
 interface ToolbarProps {
   onSetIGN: () => void;
@@ -11,6 +13,34 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode }: ToolbarProps) {
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [persistentSecret, setPersistentSecret] = useState<string | null>(null);
+  const [persistentUserId, setPersistentUserId] = useState<string | null>(null);
+  const [loadingUser, setLoadingUser] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleShowUserInfo = async () => {
+    setLoadingUser(true);
+    setError("");
+    try {
+      const secret = localStorage.getItem('persistentSecret');
+      const userId = localStorage.getItem('persistentUserId');
+      setPersistentSecret(secret);
+      setPersistentUserId(userId);
+      setShowUserModal(true);
+    } catch (e: any) {
+      setError(e.message || "Failed to fetch user info.");
+    } finally {
+      setLoadingUser(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    window.location.reload();
+  };
+
   return (
     <header className="toolbar">
       <div className="toolbar-appname">mlshophelper</div>
@@ -18,6 +48,12 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode }:
         <Dropdown label="User">
           <div className="dropdown-item" onClick={onSetIGN}>Set IGN</div>
           <div className="dropdown-item" style={{ cursor: "default", color: "#888" }}>IGN: <b>{ign || "Not set"}</b></div>
+          <div className="dropdown-item" onClick={handleShowUserInfo} style={{ color: '#2d8cff' }}>
+            {loadingUser ? 'Loading...' : 'Show User ID / Session ID'}
+          </div>
+          <div className="dropdown-item" onClick={handleLogout} style={{ color: '#e74c3c', fontWeight: 600 }}>
+            Logout
+          </div>
         </Dropdown>
         <Dropdown label="App">
           <div className="dropdown-item" onClick={onAbout}>About</div>
@@ -33,6 +69,24 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode }:
           </div>
         </Dropdown>
       </div>
+      {/* User Info Modal */}
+      {showUserModal && (
+        <div className="modal-backdrop modal-fade-in" style={{ zIndex: 3000 }} onClick={() => setShowUserModal(false)}>
+          <div className="modal-content modal-content-in" style={{ minWidth: 340, maxWidth: 440, background: '#232323', color: '#fff', borderRadius: 14, padding: 28, position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowUserModal(false)} style={{ position: 'absolute', top: 10, right: 18, background: 'none', border: 'none', color: '#fff', fontSize: 22, cursor: 'pointer' }}>×</button>
+            <h3 style={{ marginTop: 0, marginBottom: 14 }}>Your Persistent Anonymous Credentials</h3>
+            {error ? (
+              <div style={{ color: '#f55' }}>{error}</div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 12 }}><b>Persistent Secret:</b> <code>{persistentSecret || <span style={{color:'#ffb700'}}>Not available. Save it when you create your account!</span>}</code></div>
+                <div style={{ marginBottom: 12 }}><b>Persistent User ID:</b> <code>{persistentUserId || <span style={{color:'#ffb700'}}>Not available.</span>}</code></div>
+                <div style={{ color: '#ffb700', fontSize: 14 }}><b>Warning:</b> Save these somewhere safe! If you lose them, you cannot recover your data.</div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

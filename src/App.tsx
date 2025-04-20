@@ -19,6 +19,9 @@ import { ShopItemModal } from "./ShopItemModal";
 import { InventoryContextMenu } from "./InventoryContextMenu";
 import { CharacterDropdown } from "./CharacterDropdown";
 import TitleBar from "./TitleBar";
+import React from "react";
+import { getCurrentUser } from "./api/auth";
+import LoginScreen from "./components/LoginScreen";
 
 // Global UI settings context
 export interface UISettings {
@@ -101,7 +104,9 @@ interface Character {
   };
 }
 
-function App() {
+export default function App() {
+  // --- All hooks and state declarations ---
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
@@ -153,6 +158,8 @@ function App() {
     return null;
   });
   const [addCharacterPrompt, setAddCharacterPrompt] = useState(false);
+  const [stockDialog, setStockDialog] = useState<{ open: boolean, itemId?: number }>({ open: false });
+  const [shopItemModal, setShopItemModal] = useState<{ open: boolean, itemId?: number }>({ open: false });
   const tableRowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const [highlightedRow, setHighlightedRow] = useState<number | null>(null);
@@ -160,176 +167,103 @@ function App() {
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [tableScrollTop, setTableScrollTop] = useState(0);
 
-  // Persist characters to localStorage whenever they change
+  const [inventoryContextMenu, setInventoryContextMenu] = useState<{ open: boolean, x: number, y: number, itemId?: number }>({ open: false, x: 0, y: 0 });
+
+  // --- All useEffect hooks ---
   useEffect(() => {
-    localStorage.setItem('characters', JSON.stringify(characters));
-  }, [characters]);
+    getCurrentUser().then((user) => setLoggedIn(!!user));
+  }, []);
 
   useEffect(() => {
-    if (characters.length === 0) setAddCharacterPrompt(true);
-    else setAddCharacterPrompt(false);
-  }, [characters]);
-
-  // --- Stock dialog state ---
-  const [stockDialog, setStockDialog] = useState<{ open: boolean, itemId?: number }>({ open: false });
-  const [stockDialogDefault, setStockDialogDefault] = useState(1);
-
-  function handleOpenStockDialog(itemId: number) {
-    // Find the selected character and the item's current stock for that character
-    const char = characters.find(c => c.id === selectedCharacterId);
-    const stock = char?.shop?.itemCounts?.[itemId] ?? 0;
-    setStockDialogDefault(stock);
-    setStockDialog({ open: true, itemId });
-  }
-  function handleCloseStockDialog() {
-    setStockDialog({ open: false });
-  }
-  function handleStock(characterId: string, amount: number) {
-    if (!stockDialog.itemId) return;
-    setCharacters(chars => chars.map(c => {
-      if (!c.shop || typeof c.shop !== 'object') {
-        // Defensive: ensure shop is always an object
-        c = { ...c, shop: { itemCounts: {}, order: [] } };
-      }
-      if (c.id !== characterId) return c;
-      // Set the stock to the absolute value provided
-      const counts = { ...(c.shop.itemCounts || {}) };
-      const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
-      counts[stockDialog.itemId!] = amount;
-      if (!order.includes(stockDialog.itemId!)) order.push(stockDialog.itemId!);
-      return { ...c, shop: { itemCounts: counts, order } };
-    }));
-    setStockDialog({ open: false });
-  }
-
-  // --- Shop item modal state ---
-  const [shopItemModal, setShopItemModal] = useState<{ open: boolean, itemId?: number }>({ open: false });
-
-  function handleOpenShopItemModal(itemId: number) {
-    setShopItemModal({ open: true, itemId });
-  }
-  function handleCloseShopItemModal() {
-    setShopItemModal({ open: false });
-  }
-
-  async function handleShopItemSell(sellCount: number) {
-    if (!shopItemModal.itemId || !selectedCharacter) return;
-    setSellError(null);
-    const item = itemMap[shopItemModal.itemId];
-    if (!item) return;
-    const author = ign || 'Unknown';
-    const now = new Date().toISOString();
-    try {
-      for (let i = 0; i < sellCount; ++i) {
-        await invoke("add_price_history", {
-          itemId: item.id,
-          price: item.current_selling_price,
-          date: now,
-          author,
-          sold: true
-        });
-      }
-      // Decrement stock count in shop
-      setCharacters(chars => chars.map(c => {
-        if (c.id !== selectedCharacter.id) return c;
-        const counts = { ...(c.shop.itemCounts || {}) };
-        const id = item.id;
-        counts[id] = Math.max(0, (counts[id] || 0) - sellCount);
-        // Remove from order if count is now 0
-        let order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
-        if (counts[id] <= 0) {
-          delete counts[id];
-          order = order.filter(itemId => itemId !== id);
-        }
-        return { ...c, shop: { itemCounts: counts, order } };
-      }));
-      setShopItemModal({ open: false });
+    if (loggedIn === true) {
       fetchItems();
-    } catch (err: any) {
-      setSellError('Failed to record sale: ' + (err?.message || err));
-      setToast({ msg: `Error: ${err?.toString() || err}`, visible: true });
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = setTimeout(() => setToast(t => ({ ...t, visible: false })), 2600);
-      // Optionally log to console for dev
-      console.error('Sell error:', err);
     }
-  }
-
-  function handleShopItemRemove() {
-    if (!shopItemModal.itemId || !selectedCharacter) return;
-    setCharacters(chars => chars.map(c => {
-      if (c.id !== selectedCharacter.id) return c;
-      const counts = { ...(c.shop.itemCounts || {}) };
-      const id = shopItemModal.itemId!;
-      delete counts[id];
-      const order = Array.isArray(c.shop.order) ? c.shop.order.filter(itemId => itemId !== id) : [];
-      return { ...c, shop: { itemCounts: counts, order } };
-    }));
-    setShopItemModal({ open: false });
-  }
+  }, [loggedIn]);
 
   useEffect(() => {
-    fetchItems();
-  }, []);
-
-  useEffect(() => {
-    if (!search) {
-      setFilteredItems(items);
-    } else {
-      const fuse = new Fuse(items, { keys: ["name"], threshold: 0.4 });
-      setFilteredItems(fuse.search(search).map((r) => (r as FuseResult<Item>).item));
+    if (loggedIn === true) {
+      localStorage.setItem('characters', JSON.stringify(characters));
     }
-  }, [search, items]);
+  }, [characters, loggedIn]);
 
   useEffect(() => {
-    localStorage.setItem("round50k", String(round50k));
-  }, [round50k]);
-  useEffect(() => {
-    localStorage.setItem("showUnsold", String(showUnsold));
-  }, [showUnsold]);
-
-  useEffect(() => {
-    localStorage.setItem('selectedCharacterId', selectedCharacterId || '');
-  }, [selectedCharacterId]);
-
-  useEffect(() => {
-    if (!items.length) return;
-    setOwnedItems(items.filter(item => item.owned));
-  }, [items]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function fetchStats() {
-      const stats: Record<number, {recent?: PriceEntry, high7d?: PriceEntry}> = {};
-      const now = Date.now();
-      const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
-      for (const item of items) {
-        const history: PriceEntry[] = await invoke("get_price_history", { itemId: item.id });
-        const soldHistory = history.filter(e => e.sold);
-        if (soldHistory.length > 0) {
-          stats[item.id] = {
-            recent: soldHistory[0],
-            high7d: soldHistory.filter(e => new Date(e.date).getTime() >= weekAgo)
-              .sort((a, b) => b.price - a.price)[0]
-          };
-        } else {
-          stats[item.id] = {};
-        }
+    if (loggedIn === true) {
+      if (!search) {
+        setFilteredItems(items);
+      } else {
+        const fuse = new Fuse(items, { keys: ["name"], threshold: 0.4 });
+        setFilteredItems(fuse.search(search).map((r) => (r as FuseResult<Item>).item));
       }
-      if (!cancelled) setPriceStats(stats);
     }
-    if (items.length) fetchStats();
-    return () => { cancelled = true; };
-  }, [items]);
+  }, [search, items, loggedIn]);
 
   useEffect(() => {
-    const container = tableContainerRef.current;
-    if (!container) return;
-    const handleScroll = () => setTableScrollTop(container.scrollTop);
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
+    if (loggedIn === true) {
+      localStorage.setItem("round50k", String(round50k));
+    }
+  }, [round50k, loggedIn]);
+  useEffect(() => {
+    if (loggedIn === true) {
+      localStorage.setItem("showUnsold", String(showUnsold));
+    }
+  }, [showUnsold, loggedIn]);
 
+  useEffect(() => {
+    if (loggedIn === true) {
+      localStorage.setItem('selectedCharacterId', selectedCharacterId || '');
+    }
+  }, [selectedCharacterId, loggedIn]);
+
+  useEffect(() => {
+    if (loggedIn === true) {
+      if (!items.length) return;
+      setOwnedItems(items.filter(item => item.owned));
+    }
+  }, [items, loggedIn]);
+
+  useEffect(() => {
+    if (loggedIn === true) {
+      let cancelled = false;
+      async function fetchStats() {
+        const stats: Record<number, {recent?: PriceEntry, high7d?: PriceEntry}> = {};
+        const now = Date.now();
+        const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+        for (const item of items) {
+          const history: PriceEntry[] = await invoke("get_price_history", { itemId: item.id });
+          const soldHistory = history.filter(e => e.sold);
+          if (soldHistory.length > 0) {
+            stats[item.id] = {
+              recent: soldHistory[0],
+              high7d: soldHistory.filter(e => new Date(e.date).getTime() >= weekAgo)
+                .sort((a, b) => b.price - a.price)[0]
+            };
+          } else {
+            stats[item.id] = {};
+          }
+        }
+        if (!cancelled) setPriceStats(stats);
+      }
+      if (items.length) fetchStats();
+      return () => { cancelled = true; };
+    }
+  }, [items, loggedIn]);
+
+  useEffect(() => {
+    if (loggedIn === true) {
+      const container = tableContainerRef.current;
+      if (!container) return;
+      const handleScroll = () => setTableScrollTop(container.scrollTop);
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [loggedIn]);
+
+  // --- Conditional return for login ---
+  if (loggedIn === false) {
+    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+  }
+
+  // --- Rest of App logic and rendering ---
   async function fetchItems() {
     const result = await invoke<Item[]>("get_items");
     setItems(result.map(item => ({ ...item, priceHistory: item.priceHistory || [] })));
@@ -499,8 +433,6 @@ function App() {
   }
 
   // --- Context menu state for inventory panel ---
-  const [inventoryContextMenu, setInventoryContextMenu] = useState<{ open: boolean, x: number, y: number, itemId?: number }>({ open: false, x: 0, y: 0 });
-
   function handleInventoryContextMenu(e: React.MouseEvent, itemId: number) {
     e.preventDefault();
     setInventoryContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
@@ -532,6 +464,49 @@ function App() {
       const order = Array.isArray(c.shop.order) ? c.shop.order.filter(itemId => itemId !== id) : [];
       return { ...c, shop: { itemCounts: counts, order } };
     }));
+  }
+
+  function handleOpenStockDialog(itemId: number) {
+    setStockDialog({ open: true, itemId });
+  }
+
+  function handleCloseStockDialog() {
+    setStockDialog({ open: false });
+  }
+
+  function handleStock(characterId: string, amount: number) {
+    setCharacters(chars => chars.map(c => {
+      if (c.id !== characterId) return c;
+      // Set the stock to the absolute value provided
+      const counts = { ...(c.shop.itemCounts || {}) };
+      const itemId = stockDialog.itemId;
+      if (itemId !== undefined) {
+        counts[itemId] = amount;
+      }
+      // Maintain order array
+      const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
+      if (itemId !== undefined && !order.includes(itemId)) order.push(itemId);
+      return { ...c, shop: { itemCounts: counts, order } };
+    }));
+    setStockDialog({ open: false });
+  }
+
+  function handleCloseShopItemModal() {
+    setShopItemModal({ open: false });
+  }
+
+  function handleShopItemSell(count: number) {
+    if (!shopItemModal.itemId) return;
+    const itemId = shopItemModal.itemId;
+    const price = itemMap[itemId]?.current_selling_price;
+    handleSell(itemMap[itemId], count, price);
+    handleCloseShopItemModal();
+  }
+
+  function handleShopItemRemove() {
+    if (!shopItemModal.itemId) return;
+    handleDeleteInventoryItem();
+    handleCloseShopItemModal();
   }
 
   return (
@@ -979,5 +954,3 @@ function App() {
     </UISettingsContext.Provider>
   );
 }
-
-export default App;

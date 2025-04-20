@@ -13,6 +13,8 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-window": "^2.0.0-alpha.1",
+    "appwrite": "^17.0.2",
     "better-sqlite3": "^11.9.1",
     "fuse.js": "^7.0.0",
     "react": "^18.3.1",

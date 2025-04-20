@@ -88,14 +88,30 @@ fn add_item(
     current_selling_price: f64,
     owned: Option<bool>,
 ) -> Result<(), String> {
+    println!("add_item called: name={:?}, current_selling_price={:?}, owned={:?}", name, current_selling_price, owned);
     let conn = state.0.lock().unwrap();
     let now = Utc::now().to_rfc3339();
-    let owned_val = owned.unwrap_or(false);
-    conn.execute(
+    let owned_val = match owned {
+        Some(v) => v,
+        None => false,
+    };
+    // Defensive: Log type info
+    if let Some(ref v) = owned {
+        if !matches!(v, true | false) {
+            println!("ERROR: 'owned' is not a boolean: {:?}", v);
+            return Err("Invalid value for 'owned'. Must be a boolean.".to_string());
+        }
+    }
+    match conn.execute(
         "INSERT INTO items (name, current_selling_price, date_created, date_modified, owned) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![name, current_selling_price, now, now, owned_val],
-    ).map_err(|e| e.to_string())?;
-    Ok(())
+    ) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            println!("add_item DB error: {}", e);
+            Err(format!("Failed to add item: {}", e))
+        }
+    }
 }
 
 #[tauri::command]
@@ -106,14 +122,30 @@ fn update_item(
     current_selling_price: f64,
     owned: Option<bool>,
 ) -> Result<(), String> {
+    println!("update_item called: id={:?}, name={:?}, current_selling_price={:?}, owned={:?}", id, name, current_selling_price, owned);
     let conn = state.0.lock().unwrap();
     let now = Utc::now().to_rfc3339();
-    let owned_val = owned.unwrap_or(false);
-    conn.execute(
+    let owned_val = match owned {
+        Some(v) => v,
+        None => false,
+    };
+    // Defensive: Log type info
+    if let Some(ref v) = owned {
+        if !matches!(v, true | false) {
+            println!("ERROR: 'owned' is not a boolean: {:?}", v);
+            return Err("Invalid value for 'owned'. Must be a boolean.".to_string());
+        }
+    }
+    match conn.execute(
         "UPDATE items SET name = ?1, current_selling_price = ?2, date_modified = ?3, owned = ?4 WHERE id = ?5",
         params![name, current_selling_price, now, owned_val, id],
-    ).map_err(|e| e.to_string())?;
-    Ok(())
+    ) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            println!("update_item DB error: {}", e);
+            Err(format!("Failed to update item: {}", e))
+        }
+    }
 }
 
 #[tauri::command]

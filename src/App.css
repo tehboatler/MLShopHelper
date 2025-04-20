@@ -241,15 +241,11 @@ button {
 .table-responsive {
   width: 100%;
   overflow-x: auto;
-  margin-top: 24px;
+  /* margin-top: 24px; */
   margin-bottom: 0;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE 10+ */
-}
-
-.table-responsive::-webkit-scrollbar {
-  width: 0px;
-  background: transparent;
+  padding-bottom: 130px; /* Reasonable bottom padding for table */
 }
 
 .styled-table {

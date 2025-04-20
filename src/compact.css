@@ -1,0 +1,63 @@
+.compact {
+  --font-size-base: 13px;
+  --row-padding: 6px 8px;
+  --toolbar-height: 36px;
+}
+
+.compact,
+.compact * {
+  font-size: var(--font-size-base) !important;
+}
+
+.compact .styled-table th,
+.compact .styled-table td {
+  padding: var(--row-padding) !important;
+}
+
+.compact .toolbar {
+  height: var(--toolbar-height) !important;
+  min-height: var(--toolbar-height) !important;
+}
+
+.compact .toolbar-appname {
+  font-size: 1rem !important;
+}
+
+.compact .dropdown-item {
+  padding: 5px 10px !important;
+  font-size: 0.98em !important;
+}
+
+.compact .search-input {
+  padding: 6px 8px !important;
+  font-size: 0.98em !important;
+}
+
+.compact .table-action {
+  font-size: 1em !important;
+  padding: 2px 4px !important;
+}
+
+.compact .modal-content {
+  padding: 16px 12px 12px 12px !important;
+  border-radius: 8px !important;
+}
+
+.compact .modal-header {
+  font-size: 1.05rem !important;
+}
+
+.compact .modal-footer {
+  gap: 8px !important;
+  padding-top: 6px !important;
+}
+
+.compact .modal-body {
+  gap: 6px !important;
+}
+
+.compact .price-actions button,
+.compact .price-actions input[type="number"] {
+  font-size: 0.92rem !important;
+  padding: 4px 6px !important;
+}

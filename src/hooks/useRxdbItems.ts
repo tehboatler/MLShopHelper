@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react';
 import { getDb } from '../rxdb';
 import type { Item } from '../types';
 
-export function useRxdbItems(): Item[] {
+export function useRxdbItems(isAuthenticated: boolean = true): Item[] {
   const [items, setItems] = useState<Item[]>([]);
   useEffect(() => {
+    if (!isAuthenticated) {
+      setItems([]);
+      return;
+    }
     let sub: any;
     getDb().then(db => {
       sub = db.items.find().$.subscribe(docs => {
@@ -16,6 +20,6 @@ export function useRxdbItems(): Item[] {
       });
     });
     return () => sub?.unsubscribe();
-  }, []);
+  }, [isAuthenticated]);
   return items;
 }

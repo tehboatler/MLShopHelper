@@ -25,7 +25,6 @@ import LoginScreen from "./components/LoginScreen";
 import InventoryTable from "./InventoryTable";
 import { Toast } from "./Toast";
 import { getPersistentAnonUserById } from "./api/persistentAnon";
-import { ensureAnonymousSession } from './api/ensureAnonymousSession';
 import { UISettingsContext } from "./contexts/UISettingsContext";
 import type { DropResult } from '@hello-pangea/dnd';
 import {
@@ -56,7 +55,8 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userKarma, setUserKarma] = useState<number | null>(null);
-  const items = useRxdbItems(); // RxDB-backed items state
+  // Only fetch RxDB items if authenticated
+  const items = useRxdbItems(!!loggedIn);
   useEffect(() => {
     console.log('[DEBUG] RxDB items:', items);
     if (Array.isArray(items) && items.length > 0) {
@@ -227,9 +227,6 @@ export default function App() {
   }
 
   // --- All useEffect hooks ---
-  useEffect(() => {
-    ensureAnonymousSession();
-  }, []);
 
   // Move checkAuth outside useEffect so it can be called after login
   async function checkAuth() {

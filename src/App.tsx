@@ -50,19 +50,16 @@ import { addPriceHistoryEntry } from './api/priceHistory';
 import { updateItem } from './api/items';
 import { debugAppwriteSession } from './debugAppwriteSession';
 import { subscribeToAppwriteRealtimeForItems } from './rxdb';
+import { closeDb, getDb } from './rxdb';
 
 export default function App() {
   // --- All hooks and state declarations ---
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userKarma, setUserKarma] = useState<number | null>(null);
+  const [dbReady, setDbReady] = useState(false);
   // Only fetch RxDB items if authenticated
-  const items = useRxdbItems(!!loggedIn);
-
-  // Subscribe to Appwrite Realtime for items once on app mount
-  useEffect(() => {
-    subscribeToAppwriteRealtimeForItems();
-  }, []);
+  const [items, itemsLoading] = useRxdbItems(!!loggedIn && dbReady);
 
   useEffect(() => {
     console.log('[DEBUG] RxDB items:', items);
@@ -72,6 +69,11 @@ export default function App() {
       });
     }
   }, [items]);
+
+  useEffect(() => {
+    subscribeToAppwriteRealtimeForItems();
+  }, []);
+
   const [search, setSearch] = useState("");
   // const [editing, setEditing] = useState<Item | null>(null);
 
@@ -358,6 +360,29 @@ export default function App() {
     }
   }, [loggedIn]);
 
+  // Reinitialize RxDB after login/logout
+  useEffect(() => {
+    let cancelled = false;
+    async function setupDb() {
+      await closeDb(); // Always close previous instance
+      if (loggedIn) {
+        await getDb();
+        if (!cancelled) setDbReady(true);
+      } else {
+        setDbReady(false);
+      }
+    }
+    setupDb();
+    return () => { cancelled = true; };
+  }, [loggedIn]);
+
+  // Ensure userPriceMap is populated on fresh load when items and dbReady are ready
+  useEffect(() => {
+    if (loggedIn && dbReady && items && items.length > 0) {
+      fetchUserPrices();
+    }
+  }, [loggedIn, dbReady, items]);
+
   // --- Friends Filtering State ---
   const [filterByFriends, setFilterByFriends] = useState(false);
   const [friendsWhitelist, setFriendsWhitelist] = useState<string[]>([]);
@@ -638,6 +663,12 @@ export default function App() {
   if (loggedIn === null) {
     // Still checking auth, render nothing or a loading spinner
     return null;
+  }
+  if (loggedIn && !dbReady) {
+    return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading database…</div>;
+  }
+  if (itemsLoading) {
+    return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading items…</div>;
   }
   if (loggedIn === false) {
     return <LoginScreen onLogin={checkAuth} />;

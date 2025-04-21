@@ -11,6 +11,7 @@ import {
 import { getDb, updateAllItemStats } from './rxdb';
 import { MainItemTableContextMenu } from './MainItemTableContextMenu';
 import { deleteItem } from './api/items';
+import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 
 interface InventoryTableProps {
   filteredItems: Item[];
@@ -43,6 +44,23 @@ interface InventoryTableProps {
 }
 
 const columnHelper = createColumnHelper<Item>();
+
+// Custom hook for itemStats with loading state
+function useRxdbItemStats() {
+  const [itemStats, setItemStats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let sub: any;
+    getDb().then(db => {
+      sub = db.itemStats.find().$.subscribe(stats => {
+        setItemStats(stats);
+        setLoading(false);
+      });
+    });
+    return () => sub && sub.unsubscribe();
+  }, []);
+  return [itemStats, loading] as const;
+}
 
 export default function InventoryTable({
   filteredItems,
@@ -77,32 +95,19 @@ export default function InventoryTable({
     return result;
   }, [filteredItems]);
 
+  // Fetch itemStats from RxDB using observable for real-time updates
+  const [priceHistory, priceHistoryLoading] = useRxdbPriceHistory();
+  const [itemStats, itemStatsLoading] = useRxdbItemStats();
+
+  // Only update itemStats when both items and priceHistory are loaded and non-empty
+  useEffect(() => {
+    if (!priceHistoryLoading && validItems.length > 0 && priceHistory.length > 0) {
+      updateAllItemStats();
+    }
+  }, [validItems, priceHistory, priceHistoryLoading]);
+
   // Fix priceStats typing for indexed access
   const getRecentPrice = (itemId: string) => priceStats[itemId]?.recent;
-
-  // Fetch itemStats from RxDB using direct query (no rxdb-hooks)
-  const [itemStats, setItemStats] = useState<any[]>([]);
-  useEffect(() => {
-    let mounted = true;
-    getDb().then(db =>
-      db.itemStats.find().exec().then(stats => {
-        if (mounted) setItemStats(stats);
-      })
-    );
-    return () => { mounted = false; };
-  }, []);
-
-  // Update itemStats on UI refresh (mount)
-  useEffect(() => {
-    updateAllItemStats().then(() => {
-      // Optionally re-fetch itemStats after update
-      getDb().then(db =>
-        db.itemStats.find().exec().then(stats => {
-          setItemStats(stats);
-        })
-      );
-    });
-  }, []);
 
   // Memoize stats lookup by itemId
   const statsMap = useMemo(
@@ -270,6 +275,11 @@ export default function InventoryTable({
     e.preventDefault();
     setContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
   };
+
+  // Show loading if itemStats or priceHistory are not ready
+  if (itemStatsLoading || priceHistoryLoading) {
+    return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading stats…</div>;
+  }
 
   return (
     <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 }}>

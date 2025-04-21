@@ -142,8 +142,24 @@ export async function replicateItemsAppwrite(db: RxDatabase) {
   });
 }
 
+// --- Minimal sandboxed Appwrite replication for itemStats ---
+export async function replicateItemStatsAppwrite(db: RxDatabase) {
+  // Kept for backward compatibility; delegates to generic helper
+  return replicateAppwriteCollection({
+    db,
+    collectionName: 'itemStats',
+    replicationIdentifier: 'item-stats-replication',
+    envCollectionVar: 'VITE_APPWRITE_ITEM_STATS_COLLECTION',
+  });
+}
+
 // Database instance singleton
 let dbPromise: Promise<RxDatabase> | null = null;
+
+// Add a closeDb function to allow reinitialization after login/logout
+export async function closeDb() {
+  dbPromise = null;
+}
 
 export async function getDb() {
   if (!dbPromise) {
@@ -163,6 +179,7 @@ export async function getDb() {
       // --- Start Appwrite replication for items and priceHistory ---
       await replicateItemsAppwrite(db);
       await replicatePriceHistorySandbox(db);
+      await replicateItemStatsAppwrite(db);
 
       return db;
     });

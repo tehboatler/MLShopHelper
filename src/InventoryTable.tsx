@@ -9,6 +9,8 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { getDb, updateAllItemStats } from './rxdb';
+import { MainItemTableContextMenu } from './MainItemTableContextMenu';
+import { deleteItem } from './api/items';
 
 interface InventoryTableProps {
   filteredItems: Item[];
@@ -65,6 +67,16 @@ export default function InventoryTable({
   // filterByFriends,
   // friendsWhitelist
 }: InventoryTableProps) {
+  // Defensive: filter out undefined items into a local variable
+  const validItems = useMemo(() => {
+    // Debug: log the incoming filteredItems for inspection
+    console.log('[InventoryTable] filteredItems received:', filteredItems);
+    // Only accept $id (not id) now that normalization is guaranteed
+    const result = filteredItems.filter(i => i && typeof i.$id === 'string' && i.$id.length > 0 && typeof i.name === 'string' && i.name.length > 0);
+    console.log('[InventoryTable] validItems after $id filter:', result);
+    return result;
+  }, [filteredItems]);
+
   // Fix priceStats typing for indexed access
   const getRecentPrice = (itemId: string) => priceStats[itemId]?.recent;
 
@@ -94,9 +106,30 @@ export default function InventoryTable({
 
   // Memoize stats lookup by itemId
   const statsMap = useMemo(
-    () => new Map((itemStats ?? []).map(stat => [stat.itemId, stat])),
+    () => new Map((itemStats ?? []).map(stat => [stat.itemId, stat.toJSON ? stat.toJSON() : stat])),
     [itemStats]
   );
+
+  // Debug: log statsMap and a sample stats entry for the first row
+  useEffect(() => {
+    console.log('[InventoryTable] userPriceMap:', userPriceMap);
+    console.log('[InventoryTable] statsMap:', statsMap);
+    if (validItems.length > 0) {
+      const id = validItems[0].$id;
+      const stats = statsMap.get(id);
+      console.log('[InventoryTable] Sample stats for first item:', stats);
+    }
+  }, [userPriceMap, statsMap, validItems]);
+
+  // Debug: log the mapping between filteredItems and statsMap keys
+  useEffect(() => {
+    const itemIds = validItems.map(i => i.$id);
+    const statsKeys = Array.from(statsMap.keys());
+    console.log('[InventoryTable] validItems IDs:', itemIds);
+    console.log('[InventoryTable] statsMap keys:', statsKeys);
+    const missing = itemIds.filter(id => id && !statsMap.has(id));
+    console.log('[InventoryTable] Item IDs missing in statsMap:', missing);
+  }, [validItems, statsMap]);
 
   // Define columns using TanStack Table
   const columns = useMemo(() => [
@@ -139,7 +172,12 @@ export default function InventoryTable({
           Your Price {sortKey === 'current_selling_price' ? (sortAsc ? '▲' : '▼') : ''}
         </span>
       ),
-      cell: info => userPriceMap.get(info.row.original.$id)?.price?.toLocaleString() ?? <span style={{color:'#888'}}>No price set</span>,
+      cell: info => {
+        const entry = userPriceMap.get(info.row.original.$id);
+        return entry && typeof entry.price === 'number'
+          ? entry.price.toLocaleString()
+          : <span style={{color:'#888'}}>No price set</span>;
+      },
       size: 120,
     }),
     columnHelper.display({
@@ -187,7 +225,7 @@ export default function InventoryTable({
   ], [handleOpenStockDialog, handleSort, priceStats, setSellItem, setSellModalOpen, sortAsc, sortKey, userPriceMap]);
 
   const table = useReactTable({
-    data: filteredItems,
+    data: validItems,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -205,6 +243,33 @@ export default function InventoryTable({
   const visibleRows = search.trim().length > 0
     ? table.getRowModel().rows
     : table.getRowModel().rows.slice(0, 7);
+
+  // Context menu state for main item table
+  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; itemId: string | null }>({ open: false, x: 0, y: 0, itemId: null });
+
+  // Refresh items function (calls parent fetch if available)
+  const refreshItems = () => {
+    if (typeof window !== 'undefined' && window.location) {
+      window.location.reload(); // fallback, or trigger parent fetch if available
+    }
+  };
+
+  // Handler for right click/context menu
+  const handleMainTableContextMenu = (e: React.MouseEvent, itemId: string) => {
+    e.preventDefault();
+    setContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
+  };
+
+  // Delete handler for main table
+  const handleDelete = async () => {
+    if (!contextMenu.itemId) return;
+    try {
+      await deleteItem(contextMenu.itemId);
+      refreshItems();
+    } catch (err) {
+      alert('Failed to delete item: ' + (err?.toString() || err));
+    }
+  };
 
   return (
     <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 }}>
@@ -258,7 +323,7 @@ export default function InventoryTable({
                     }
                     openHistoryModal(row.original);
                   }}
-                  onContextMenu={e => handleInventoryContextMenu(e, row.original.$id)}
+                  onContextMenu={e => handleMainTableContextMenu(e, row.original.$id)}
                   style={{
                     cursor: 'pointer',
                     background: i % 2 === 1 ? '#292929' : "#202020",
@@ -319,6 +384,18 @@ export default function InventoryTable({
           </tbody>
         </table>
       </div>
+      {/* Main item table context menu */}
+      {contextMenu.open && (
+        <MainItemTableContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu({ ...contextMenu, open: false })}
+          onPriceHistory={() => openHistoryModal(validItems.find(i => i.$id === contextMenu.itemId)!)}
+          onChangePrice={() => setModalOpen(true)}
+          onDelete={handleDelete}
+          deleteLabel="Delete from database"
+        />
+      )}
     </div>
   );
 }

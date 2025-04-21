@@ -20,8 +20,6 @@ import { InventoryPanel } from "./InventoryPanel";
 import TitleBar from "./TitleBar";
 import React from "react";
 import { getCurrentUser } from "./api/auth";
-import { getItems, addItem, updateItem, deleteItem } from "./api/items";
-import { addPriceHistoryEntry, getLatestUserPriceEntriesBatch, getLatestSoldEntriesBatch } from "./api/priceHistory";
 import { getIGNForUserId, setIGNForUserId } from "./api/anonLinks";
 import LoginScreen from "./components/LoginScreen";
 import InventoryTable from "./InventoryTable";
@@ -45,39 +43,30 @@ import {
   handleRecordSale as makeHandleRecordSale
 } from './handlers/inventoryHandlers';
 // import { getDb } from './rxdb';
-// import { syncPriceHistoryToRxdb } from './api/priceHistory';
+import { getLatestUserPriceEntriesBatchRX, getLatestSoldEntriesBatchRX } from './priceHistoryRXDB';
 import Ledger from "./Ledger";
+import AddEditItemModal from "./AddEditItemModal";
+import { useRxdbItems } from './hooks/useRxdbItems';
+import { addPriceHistoryEntry } from './api/priceHistory';
+import { updateItem } from './api/items';
+import { debugAppwriteSession } from './debugAppwriteSession';
 
 export default function App() {
   // --- All hooks and state declarations ---
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userKarma, setUserKarma] = useState<number | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
-  const [search, setSearch] = useState("");
-  // const [editing, setEditing] = useState<Item | null>(null);
-
-  // --- Local caching for items ---
-  // Try to restore items from localStorage on mount
+  const items = useRxdbItems(); // RxDB-backed items state
   useEffect(() => {
-    const cached = localStorage.getItem('cachedItems');
-    if (cached) {
-      try {
-        const { data, ts } = JSON.parse(cached);
-        // Consider data stale if older than 24 hours
-        if (data && ts && Date.now() - ts < 24 * 60 * 60 * 1000) {
-          setItems(data);
-        }
-      } catch {}
-    }
-  }, []);
-
-  // When items are updated via fetch, update cache
-  useEffect(() => {
-    if (items && items.length > 0) {
-      localStorage.setItem('cachedItems', JSON.stringify({ data: items, ts: Date.now() }));
+    console.log('[DEBUG] RxDB items:', items);
+    if (Array.isArray(items) && items.length > 0) {
+      items.forEach((item, idx) => {
+        console.log(`[DEBUG] Item[${idx}]:`, item);
+      });
     }
   }, [items]);
+  const [search, setSearch] = useState("");
+  // const [editing, setEditing] = useState<Item | null>(null);
 
   // --- useReducer for modal state ---
   type ModalState = {
@@ -184,8 +173,11 @@ export default function App() {
     if (!persistentUserId || !items || items.length === 0) return;
     try {
       // Use new batch fetch function for efficiency
-      const map = await getLatestUserPriceEntriesBatch(items.map(item => item.$id), persistentUserId);
-      setUserPriceMap(map);
+      const map = await getLatestUserPriceEntriesBatchRX(persistentUserId);
+      console.log('[fetchUserPrices] map from getLatestUserPriceEntriesBatchRX:', map);
+      const userPriceMap = new Map(Object.entries(map));
+      console.log('[fetchUserPrices] userPriceMap after conversion:', userPriceMap);
+      setUserPriceMap(userPriceMap);
     } catch (err) {
       console.error('[fetchUserPrices] Error fetching latest user prices:', err);
     }
@@ -218,7 +210,7 @@ export default function App() {
     try { localItems = JSON.parse(localStorage.getItem('localItems') || '[]'); } catch {}
     localItems = localItems.map((i: Item) => i.$id === itemId ? { ...i, current_selling_price: newPrice } : i);
     localStorage.setItem('localItems', JSON.stringify(localItems));
-    setItems(prev => prev.map(i => i.$id === itemId ? { ...i, current_selling_price: newPrice } : i));
+    // setItems(prev => prev.map(i => i.$id === itemId ? { ...i, current_selling_price: newPrice } : i));
   }
 
   // Helper to show toast and auto-dismiss after 1.7s
@@ -247,7 +239,7 @@ export default function App() {
       const user = await getCurrentUser();
       if (user && persistentSecret && persistentUserId) {
         setLoggedIn(true);
-        setUserId(user.$id);
+        setUserId(persistentUserId);
       } else {
         setLoggedIn(false);
         setUserId(null);
@@ -262,13 +254,6 @@ export default function App() {
   useEffect(() => {
     checkAuth();
   }, []);
-
-  // Consolidated: Fetch items when logged in, then fetch user prices when items and userId are ready
-  useEffect(() => {
-    if (loggedIn === true) {
-      fetchItems();
-    }
-  }, [loggedIn]);
 
   useEffect(() => {
     if (userId && items.length > 0) {
@@ -306,10 +291,10 @@ export default function App() {
       async function fetchStats() {
         const stats: Record<string, { recent?: PriceHistoryEntry }> = {};
         // Batch fetch all latest sold entries for all items
-        const latestMap = await getLatestSoldEntriesBatch(items.map(item => item.$id));
+        const latestMap = await getLatestSoldEntriesBatchRX(userId!);
         items.forEach(item => {
-          if (latestMap.has(item.$id)) {
-            stats[item.$id] = { recent: latestMap.get(item.$id) };
+          if (Object.prototype.hasOwnProperty.call(latestMap, item.$id)) {
+            stats[item.$id] = { recent: latestMap[item.$id] };
           } else {
             stats[item.$id] = {};
           }
@@ -396,8 +381,8 @@ export default function App() {
   // --- Memoized Fuse instance and filteredItems ---
   const fuse = useMemo(() => new Fuse(items, { keys: ["name", "notes"] }), [items]);
   const filteredItems = useMemo(() => {
-    if (!search) return items;
-    return fuse.search(search).map(result => result.item);
+    if (!search) return items.filter(Boolean);
+    return fuse.search(search).map(result => result.item).filter(Boolean);
   }, [search, fuse, items]);
 
   // Helper for opening the StockDialog
@@ -405,45 +390,30 @@ export default function App() {
     setStockDialog({ open: true, itemId });
   }
 
-  // --- Rest of App logic and rendering ---
-  async function fetchItems() {
-    try {
-      const result = await getItems();
-      // Appwrite returns { documents: [...] }
-      const mapped = result.documents.map((doc: any) => ({
-        ...doc,
-        id: doc.$id,
-        current_selling_price: doc.price ?? doc.current_selling_price ?? 0,
-        priceHistory: doc.priceHistory || [],
-      }));
-      setItems(mapped);
-      // Update cache immediately after fetch
-      localStorage.setItem('cachedItems', JSON.stringify({ data: mapped, ts: Date.now() }));
-    } catch (err) {
-      showToast(`Failed to fetch items: ${err?.toString() || err}`);
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = setTimeout(() => setToast(t => ({ ...t, visible: false })), 2600);
-    }
-  }
+  // --- Helper to open Price History Modal on left-click ---
+  const openHistoryModal = (item: Item) => {
+    setPriceHistoryModal({ open: true, itemId: item.$id });
+  };
 
+  // --- Rest of App logic and rendering ---
   async function handleAddOrEdit(e: React.FormEvent) {
     e.preventDefault();
     try {
       if (modalState.editingItem) {
-        await updateItem(modalState.editingItem.$id, {
-          name: modalState.name,
-          price: parseFloat(modalState.price),
-          notes: modalState.editingItem.notes,
-        });
+        // await updateItem(modalState.editingItem.$id, {
+        //   name: modalState.name,
+        //   price: parseFloat(modalState.price),
+        //   notes: modalState.editingItem.notes,
+        // });
       } else {
-        await addItem({
-          name: modalState.name,
-          price: parseFloat(modalState.price),
-          notes: '',
-        });
+        // await addItem({
+        //   name: modalState.name,
+        //   price: parseFloat(modalState.price),
+        //   notes: '',
+        // });
       }
       dispatchModal({ type: 'CLOSE' });
-      fetchItems();
+      // fetchItems();
     } catch (err: any) {
       showToast(`Error: ${err?.toString() || err}`);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -453,8 +423,8 @@ export default function App() {
 
   async function handleDelete(id: string) {
     try {
-      await deleteItem(id);
-      fetchItems();
+      // await deleteItem(id);
+      // fetchItems();
     } catch (err: any) {
       showToast(`Error: ${err?.toString() || err}`);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -471,7 +441,7 @@ export default function App() {
     }
     // Pass itemName to handleChangePrice
     await handleChangePrice(item.$id.toString(), price, undefined, true, item.name);
-    fetchItems();
+    // fetchItems();
     await fetchUserPrices(); // Ensure user price map is refreshed after sale
     await refreshUserKarma(); // Ensure karma is refreshed after sale
   }
@@ -511,7 +481,6 @@ export default function App() {
       await updateItem(itemId, updateObj);
       updateLocalAndStatePrice(itemId, newPrice);
       showToast("Price updated and history recorded!");
-      // Optionally refresh price history modal if open
       if (priceHistoryModal.open && priceHistoryModal.itemId === itemId) {
         // fetchAndSetPriceHistory(itemId);
       }
@@ -821,46 +790,20 @@ export default function App() {
               handleOpenStockDialog={itemId => setStockDialog({ open: true, itemId })}
               setSellItem={setSellItem}
               setSellModalOpen={setSellModalOpen}
-              openHistoryModal={item => setPriceHistoryModal({ open: true, itemId: item.$id })}
+              openHistoryModal={openHistoryModal}
               filterByFriends={filterByFriends}
               friendsWhitelist={friendsWhitelist}
             />
           </div>
         </div>
         <Toast msg={toast.msg} visible={toast.visible} />
-        <Modal open={modalState.open} onClose={() => dispatchModal({ type: 'CLOSE' })}>
-          <h2>{modalState.editingItem ? "Edit Item" : "Add Item"}</h2>
-          <form onSubmit={handleAddOrEdit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <ItemNameAutocomplete
-              value={modalState.name}
-              onChange={(value) => dispatchModal({ type: 'SET_NAME', value })}
-              placeholder="Item name"
-              required
-              autoFocus
-              existingItems={items.map(i => i.name)}
-              style={{ width: "100%", boxSizing: "border-box" }}
-            />
-            <input
-              value={modalState.price}
-              onChange={(e) => dispatchModal({ type: 'SET_PRICE', value: e.target.value })}
-              placeholder="Current Price"
-              type="number"
-              min="0"
-              step="any"
-              required
-              style={{ width: "100%", boxSizing: "border-box" }}
-            />
-            {items.some(i => i.name.trim().toLowerCase() === modalState.name.trim().toLowerCase()) && !modalState.editingItem && (
-              <div style={{ color: '#2d8cff', fontWeight: 500, fontSize: 15, marginTop: -6 }}>
-                This item already exists and cannot be added again.
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button type="submit" disabled={items.some(i => i.name.trim().toLowerCase() === modalState.name.trim().toLowerCase()) && !modalState.editingItem}>Save</button>
-              <button type="button" onClick={() => dispatchModal({ type: 'CLOSE' })}>Cancel</button>
-            </div>
-          </form>
-        </Modal>
+        <AddEditItemModal
+          open={modalState.open}
+          modalState={modalState}
+          dispatchModal={dispatchModal}
+          items={items}
+          handleAddOrEdit={handleAddOrEdit}
+        />
         <Modal open={modalState.ign} onClose={() => dispatchModal({ type: 'CLOSE' })}>
           <h2>Set In-Game Name</h2>
           <form onSubmit={handleSetIGN} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -974,6 +917,13 @@ export default function App() {
             deleteLabel="Remove from Store"
           />
         )}
+        {/* TEMP: Button to debug Appwrite session */}
+        <button
+          style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 5000, background: '#2d8cff', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, boxShadow: '0 2px 10px #0003', cursor: 'pointer' }}
+          onClick={debugAppwriteSession}
+        >
+          Debug Appwrite Session
+        </button>
       </main>
     </UISettingsContext.Provider>
   );

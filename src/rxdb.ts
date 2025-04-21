@@ -1,4 +1,5 @@
-import { createRxDatabase, addRxPlugin, RxDatabase } from 'rxdb';
+import { createRxDatabase, addRxPlugin } from 'rxdb';
+import type { RxDatabase } from 'rxdb';
 import { replicateAppwrite } from 'rxdb/plugins/replication-appwrite';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { wrappedValidateAjvStorage, getAjv } from 'rxdb/plugins/validate-ajv';
@@ -31,12 +32,12 @@ export const itemSchema = {
   properties: {
     id: { type: 'string', maxLength: 128 },
     name: { type: 'string' },
-    current_selling_price: { type: 'number' },
-    notes: { type: ['string', 'null'] },
+    price: { type: 'number' },
     owned: { type: 'boolean' },
+    notes: { type: ['string', 'null'] },
     // ...other fields as needed
   },
-  required: ['id', 'name', 'current_selling_price'],
+  required: ['id', 'name', 'price'],
 };
 
 // Price history schema
@@ -82,6 +83,65 @@ export const itemStatsSchema = {
   additionalProperties: false,
 } as const;
 
+interface ReplicateAppwriteCollectionOptions {
+  db: RxDatabase;
+  collectionName: string;
+  replicationIdentifier: string;
+  envCollectionVar: string;
+}
+
+// --- Generic Appwrite replication helper ---
+export async function replicateAppwriteCollection({
+  db,
+  collectionName,
+  replicationIdentifier,
+  envCollectionVar,
+}: ReplicateAppwriteCollectionOptions) {
+  const { VITE_APPWRITE_DATABASE } = import.meta.env;
+  const { client } = await import('./lib/appwrite');
+  const collectionId = import.meta.env[envCollectionVar];
+  return replicateAppwrite({
+    replicationIdentifier,
+    client,
+    databaseId: VITE_APPWRITE_DATABASE,
+    collectionId,
+    deletedField: '_deleted',
+    collection: db[collectionName],
+    pull: {
+      batchSize: 1000,
+      modifier: doc => {
+        if (doc.$id && !doc.id) doc.id = doc.$id;
+        return doc;
+      },
+    },
+    // No push config: one-way sync only
+    live: true,
+    retryTime: 5000,
+  });
+}
+
+// --- Minimal sandboxed Appwrite replication for priceHistory ---
+export async function replicatePriceHistorySandbox(db: RxDatabase) {
+  // Kept for backward compatibility; delegates to generic helper
+  return replicateAppwriteCollection({
+    db,
+    collectionName: 'priceHistory',
+    replicationIdentifier: 'price-history-replication-sandbox',
+    envCollectionVar: 'VITE_APPWRITE_PRICE_HISTORY_COLLECTION',
+  });
+}
+
+// --- Minimal sandboxed Appwrite replication for items ---
+export async function replicateItemsAppwrite(db: RxDatabase) {
+  // Kept for backward compatibility; delegates to generic helper
+  return replicateAppwriteCollection({
+    db,
+    collectionName: 'items',
+    replicationIdentifier: 'items-replication',
+    envCollectionVar: 'VITE_APPWRITE_ITEMS_COLLECTION',
+  });
+}
+
 // Database instance singleton
 let dbPromise: Promise<RxDatabase> | null = null;
 
@@ -100,36 +160,14 @@ export async function getDb() {
         itemStats: { schema: itemStatsSchema }, // <-- add itemStats
       });
 
-      // --- Start Appwrite replication for priceHistory ---
+      // --- Start Appwrite replication for items and priceHistory ---
+      await replicateItemsAppwrite(db);
       await replicatePriceHistorySandbox(db);
+
       return db;
     });
   }
   return dbPromise;
-}
-
-// --- Minimal sandboxed Appwrite replication for priceHistory ---
-export async function replicatePriceHistorySandbox(db: RxDatabase) {
-  const { VITE_APPWRITE_DATABASE, VITE_APPWRITE_PRICE_HISTORY_COLLECTION } = import.meta.env;
-  const { client } = await import('./lib/appwrite');
-  return replicateAppwrite({
-    replicationIdentifier: 'price-history-replication-sandbox',
-    client,
-    databaseId: VITE_APPWRITE_DATABASE,
-    collectionId: VITE_APPWRITE_PRICE_HISTORY_COLLECTION,
-    deletedField: '_deleted',
-    collection: db.priceHistory,
-    pull: {
-      batchSize: 1000,
-      modifier: doc => {
-        if (doc.$id && !doc.id) doc.id = doc.$id;
-        return doc;
-      },
-    },
-    // No push config: one-way sync only
-    live: true,
-    retryTime: 5000,
-  });
 }
 
 // --- Compute and update itemStats from priceHistory ---

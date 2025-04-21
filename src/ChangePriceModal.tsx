@@ -291,7 +291,7 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
     setLoading(true);
     setError("");
     try {
-      // Only call the parent onSetPrice handler, do NOT add to DB here
+      // Only call the parent onSetPrice handler, which will update Appwrite
       onSetPrice(newPrice);
       setCustomPrice("");
       setPercent(0);

@@ -92,3 +92,35 @@ export async function deletePriceHistoryEntryRX(entryId: string) {
   }
   return false;
 }
+
+// Returns a map of itemId -> latest PriceHistoryEntry for the given user.
+export async function getLatestUserPriceEntriesBatchRX(userId: string) {
+  const db = await getDb();
+  const entries = await db.priceHistory.find({
+    selector: { author: userId },
+    sort: [{ date: 'desc' }]
+  }).exec();
+  const latestMap: Record<string, any> = {};
+  for (const entry of entries) {
+    if (!latestMap[entry.itemId]) {
+      latestMap[entry.itemId] = entry.toJSON();
+    }
+  }
+  return latestMap;
+}
+
+// Returns a map of itemId -> latest SOLD PriceHistoryEntry for the given user.
+export async function getLatestSoldEntriesBatchRX(userId: string) {
+  const db = await getDb();
+  const entries = await db.priceHistory.find({
+    selector: { author: userId, sold: true },
+    sort: [{ date: 'desc' }]
+  }).exec();
+  const latestSoldMap: Record<string, any> = {};
+  for (const entry of entries) {
+    if (!latestSoldMap[entry.itemId]) {
+      latestSoldMap[entry.itemId] = entry.toJSON();
+    }
+  }
+  return latestSoldMap;
+}

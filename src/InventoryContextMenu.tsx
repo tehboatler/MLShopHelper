@@ -88,7 +88,7 @@ export function InventoryContextMenu({ x, y, onClose, onAdjustStock, onPriceHist
             onClose();
           }}
         >
-          {deleteLabel ?? 'Delete Item'}
+          {deleteLabel ?? 'Delete item from database'}
         </div>
       )}
     </div>

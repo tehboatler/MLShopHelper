@@ -108,6 +108,19 @@ export default function InventoryTable({
       size: 120,
     }),
     columnHelper.display({
+      id: 'median_price',
+      header: () => (
+        <span style={{ cursor: 'pointer' }}>
+          Median Price
+        </span>
+      ),
+      cell: info => {
+        const median = priceStats[info.row.original.$id]?.p50;
+        return median !== undefined ? median.toLocaleString() : <span style={{color:'#888'}}>–</span>;
+      },
+      size: 120,
+    }),
+    columnHelper.display({
       id: 'last_sold',
       header: () => (
         <span style={{ cursor: 'pointer' }} onClick={() => handleSort('last_sold')}>

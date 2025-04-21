@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Modal } from "./Modal";
 import { ChangePriceModal } from "./ChangePriceModal";
-import { getPriceHistory, syncPriceHistoryToRxdb, addPriceHistoryEntry } from './api/priceHistory';
-import { getRecentPriceHistory } from './priceHistoryRXDB';
+// import { getPriceHistory, syncPriceHistoryToRxdb, addPriceHistoryEntry } from './api/priceHistory';
+// import { getRecentPriceHistory } from './priceHistoryRXDB';
 import { getIGNForUserId } from "./api/anonLinks";
-import { getPersistentAnonUsersInfoBatch } from "./api/persistentAnon";
-import { updateUserKarma } from "./api/persistentAnon";
+// import { getPersistentAnonUsersInfoBatch } from "./api/persistentAnon";
+// import { updateUserKarma } from "./api/persistentAnon";
 import { downvotePriceHistoryEntry } from "./api/priceHistory";
 import Plot from 'react-plotly.js';
 import {
@@ -35,47 +35,47 @@ function formatDate(date: string, format?: string): string {
   return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
 }
 
-// Helper: persistent cache for user info
-function getUserInfoCache() {
-  try {
-    return JSON.parse(localStorage.getItem('userInfoCache') || '{}');
-  } catch {
-    return {};
-  }
-}
-function setUserInfoCache(cache: Record<string, { ign?: string, karma?: number }>) {
-  localStorage.setItem('userInfoCache', JSON.stringify(cache));
-}
+// // Helper: persistent cache for user info
+// function getUserInfoCache() {
+//   try {
+//     return JSON.parse(localStorage.getItem('userInfoCache') || '{}');
+//   } catch {
+//     return {};
+//   }
+// }
+// function setUserInfoCache(cache: Record<string, { ign?: string, karma?: number }>) {
+//   localStorage.setItem('userInfoCache', JSON.stringify(cache));
+// }
 
 // --- batching and caching for user info ---
-async function batchFetchUserInfo(userIds: string[]): Promise<Record<string, { ign?: string; karma?: number }>> {
-  // Use persistent cache
-  let cache = getUserInfoCache();
-  const uncached = userIds.filter(id => !cache[id]);
-  let results: Record<string, { ign?: string; karma?: number }> = {};
-  if (uncached.length > 0) {
-    // Batch fetch missing user info
-    const fetched = await getPersistentAnonUsersInfoBatch(uncached);
-    // Merge into cache
-    cache = { ...cache, ...fetched };
-    setUserInfoCache(cache);
-  }
-  userIds.forEach(id => {
-    results[id] = cache[id] || {};
-  });
-  return results;
-}
+// async function batchFetchUserInfo(userIds: string[]): Promise<Record<string, { ign?: string; karma?: number }>> {
+//   // Use persistent cache
+//   let cache = getUserInfoCache();
+//   const uncached = userIds.filter(id => !cache[id]);
+//   let results: Record<string, { ign?: string; karma?: number }> = {};
+//   if (uncached.length > 0) {
+//     // Batch fetch missing user info
+//     const fetched = await getPersistentAnonUsersInfoBatch(uncached);
+//     // Merge into cache
+//     cache = { ...cache, ...fetched };
+//     setUserInfoCache(cache);
+//   }
+//   userIds.forEach(id => {
+//     results[id] = cache[id] || {};
+//   });
+//   return results;
+// }
 
 export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPrice, filterByFriends, friendsWhitelist, onSetPrice }: PriceHistoryModalProps) {
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
   const [changeModalOpen, setChangeModalOpen] = useState(false);
   const [showUnsold, setShowUnsold] = useState(false);
-  const [authorIGNMap, setAuthorIGNMap] = useState<Record<string, string>>({});
+  const [authorIGNMap, _] = useState<Record<string, string>>({});
   const [authorKarmaMap, setAuthorKarmaMap] = useState<Record<string, number>>({});
-  const [currentUserIGN, setCurrentUserIGN] = useState<string>("");
+  const [__, setCurrentUserIGN] = useState<string>("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [downvoteLoading, setDownvoteLoading] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(false);
+  const [___, setLoading] = useState(false);
   const replicationRef = useRef<any>(null);
 
   useEffect(() => {

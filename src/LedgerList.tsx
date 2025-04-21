@@ -10,7 +10,7 @@ interface LedgerListProps {
 }
 
 export const LedgerList: React.FC<LedgerListProps> = ({ entries, itemMap = {}, emptyText }) => {
-  const [hovered, setHovered] = useState<string | null>(null);
+  const [hovered, _] = useState<string | null>(null);
   const [showReturnTop, setShowReturnTop] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -29,7 +29,7 @@ export const LedgerList: React.FC<LedgerListProps> = ({ entries, itemMap = {}, e
   });
 
   // Calculate row height depending on sold
-  const getRowHeight = (entry: PriceHistoryEntry) => 64; // Fixed height for all rows
+  const getRowHeight = (_: PriceHistoryEntry) => 64; // Fixed height for all rows
 
   // Show 'Return to Top' if user is scrolled down
   useEffect(() => {
@@ -146,7 +146,7 @@ export const LedgerList: React.FC<LedgerListProps> = ({ entries, itemMap = {}, e
               <div
                 key={e.$id}
                 className={`ledger-list-row block`}
-                onMouseEnter={ev => setTooltip(null)}
+                onMouseEnter={_ => setTooltip(null)}
                 onMouseMove={ev => setTooltip({
                   x: ev.clientX + 12,
                   y: ev.clientY + 16,

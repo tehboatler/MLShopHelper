@@ -1,8 +1,8 @@
 import React, { useState, useContext, useEffect, useMemo } from "react";
 import { Modal } from "./Modal";
 import { UISettingsContext } from "./contexts/UISettingsContext";
-import { getPriceHistory, addPriceHistoryEntry, syncPriceHistoryToRxdb } from "./api/priceHistory";
-import { getPersistentAnonUserById } from "./api/persistentAnon";
+// import { getPriceHistory, addPriceHistoryEntry, syncPriceHistoryToRxdb } from "./api/priceHistory";
+// import { getPersistentAnonUserById } from "./api/persistentAnon";
 import type { PriceHistoryEntry } from "./types";
 import {
   useReactTable,
@@ -38,13 +38,13 @@ function formatRelativeDate(dateString: string): string {
   return "just now";
 }
 
-// --- Utility: Appwrite-compliant ID generator ---
-function makeAppwriteId(itemId: string, userId: string) {
-  const safeDate = new Date().toISOString().replace(/[^a-zA-Z0-9]/g, '').slice(0, 14);
-  return `${itemId.slice(0, 12)}-${safeDate}-${userId.slice(0, 8)}`.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 36);
-}
+// // --- Utility: Appwrite-compliant ID generator ---
+// function makeAppwriteId(itemId: string, userId: string) {
+//   const safeDate = new Date().toISOString().replace(/[^a-zA-Z0-9]/g, '').slice(0, 14);
+//   return `${itemId.slice(0, 12)}-${safeDate}-${userId.slice(0, 8)}`.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 36);
+// }
 
-export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, itemId, title, item_name, preloadedPriceHistory }: ChangePriceModalProps) {
+export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, itemId, preloadedPriceHistory }: ChangePriceModalProps) {
   const uiSettings = useContext(UISettingsContext);
   const round50k = uiSettings?.round50k ?? false;
   const showUnsold = uiSettings?.showUnsold ?? false;
@@ -304,10 +304,10 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
     }
   }
 
-  function handleCustomPriceChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setCustomPrice(e.target.value);
-    if (e.target.value) setPercent(0);
-  }
+  // function handleCustomPriceChange(e: React.ChangeEvent<HTMLInputElement>) {
+  //   setCustomPrice(e.target.value);
+  //   if (e.target.value) setPercent(0);
+  // }
 
   function handlePercentChange(val: number) {
     setPercent(val);

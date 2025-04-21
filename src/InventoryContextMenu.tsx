@@ -13,7 +13,7 @@ interface InventoryContextMenuProps {
 
 export function InventoryContextMenu({ x, y, onClose, onAdjustStock, onPriceHistory, onRecordSale, onDelete, deleteLabel }: InventoryContextMenuProps) {
   React.useEffect(() => {
-    const handle = (e: MouseEvent) => {
+    const handle = (_: MouseEvent) => {
       onClose();
     };
     window.addEventListener("mousedown", handle);

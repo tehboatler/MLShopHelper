@@ -1,8 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import React, { useState } from "react";
 import { Dropdown } from "./Dropdown";
-import { getCurrentUser, createAnonymousSessionWithSessionId, logout } from "./api/auth";
-import { getPersistentUserId } from './api/persistentAnon';
+import {logout } from "./api/auth";
+// import { getPersistentUserId } from './api/persistentAnon';
 import { FriendsModal } from './FriendsModal';
 
 interface ToolbarProps {
@@ -18,7 +18,7 @@ interface ToolbarProps {
 
 export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, userKarma, filterByFriends, setFilterByFriends }: ToolbarProps) {
   const [showUserModal, setShowUserModal] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, _] = useState<string | null>(null);
   const [persistentSecret, setPersistentSecret] = useState<string | null>(null);
   const [persistentUserId, setPersistentUserId] = useState<string | null>(null);
   const [loadingUser, setLoadingUser] = useState(false);

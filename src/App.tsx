@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useReducer } from "react";
-import type { FuseResult } from "fuse.js";
+// import type { FuseResult } from "fuse.js";
 import Fuse from "fuse.js";
 import { Item, Character } from "./types";
 import type { PriceHistoryEntry } from "./types";
@@ -12,7 +12,7 @@ import { ContextMenu } from "./ContextMenu";
 import { PriceHistoryModal } from "./PriceHistoryModal";
 import { SellModal } from "./SellModal";
 import { ItemNameAutocomplete } from "./ItemNameAutocomplete";
-import { SectionHeader } from "./SectionHeader";
+// import { SectionHeader } from "./SectionHeader";
 import { StockDialog } from "./StockDialog";
 import { ShopItemModal } from "./ShopItemModal";
 import { InventoryContextMenu } from "./InventoryContextMenu";
@@ -21,7 +21,7 @@ import TitleBar from "./TitleBar";
 import React from "react";
 import { getCurrentUser } from "./api/auth";
 import { getItems, addItem, updateItem, deleteItem } from "./api/items";
-import { addPriceHistoryEntry, getPriceHistory, getPriceHistoryForUser, getLatestUserPriceEntry, getLatestSoldEntry, getLatestUserPriceEntriesBatch, getLatestSoldEntriesBatch } from "./api/priceHistory";
+import { addPriceHistoryEntry, getLatestUserPriceEntriesBatch, getLatestSoldEntriesBatch } from "./api/priceHistory";
 import { getIGNForUserId, setIGNForUserId } from "./api/anonLinks";
 import LoginScreen from "./components/LoginScreen";
 import InventoryTable from "./InventoryTable";
@@ -34,8 +34,8 @@ import {
   handleStock as makeHandleStock,
   handleDeleteInventoryItem as makeHandleDeleteInventoryItem,
   handleAddCharacter as makeHandleAddCharacter,
-  handleCharacterSelect as makeHandleCharacterSelect,
-  handleCharacterChange as makeHandleCharacterChange
+  // handleCharacterSelect as makeHandleCharacterSelect,
+  // handleCharacterChange as makeHandleCharacterChange
 } from './handlers/characterHandlers';
 import {
   handleInventoryContextMenu as makeHandleInventoryContextMenu,
@@ -44,8 +44,8 @@ import {
   handlePriceHistory as makeHandlePriceHistory,
   handleRecordSale as makeHandleRecordSale
 } from './handlers/inventoryHandlers';
-import { getDb } from './rxdb';
-import { syncPriceHistoryToRxdb } from './api/priceHistory';
+// import { getDb } from './rxdb';
+// import { syncPriceHistoryToRxdb } from './api/priceHistory';
 import Ledger from "./Ledger";
 
 export default function App() {
@@ -55,7 +55,7 @@ export default function App() {
   const [userKarma, setUserKarma] = useState<number | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
-  const [editing, setEditing] = useState<Item | null>(null);
+  // const [editing, setEditing] = useState<Item | null>(null);
 
   // --- Local caching for items ---
   // Try to restore items from localStorage on mount
@@ -131,7 +131,6 @@ export default function App() {
   const [ign, setIGN] = useState<string>("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: Item | null }>({ x: 0, y: 0, item: null });
   const [priceHistoryModal, setPriceHistoryModal] = useState<{ open: boolean, itemId?: string }>({ open: false });
-  const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
   const [round50k, setRound50k] = useState(() => {
     const val = localStorage.getItem("round50k");
     return val ? val === "true" : false;
@@ -164,7 +163,7 @@ export default function App() {
     if (saved) return JSON.parse(saved);
     return null;
   });
-  const [addCharacterPrompt, setAddCharacterPrompt] = useState(false);
+  const [addCharacterPrompt, _] = useState(false);
   const [stockDialog, setStockDialog] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const [shopItemModal, setShopItemModal] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
@@ -347,21 +346,21 @@ export default function App() {
   }, [loggedIn]);
 
   // Restore IGN from anon_links on login
-  async function restoreIGN() {
-    if (loggedIn === true) {
-      const persistentUserId = localStorage.getItem('persistentUserId');
-      console.log('[IGN DEBUG] restoreIGN persistentUserId:', persistentUserId);
-      if (persistentUserId) {
-        try {
-          const ignFromDb = await getIGNForUserId(persistentUserId);
-          console.log('[IGN DEBUG] restoreIGN ignFromDb:', ignFromDb);
-          if (ignFromDb) setIGN(ignFromDb);
-        } catch (err) {
-          console.error('[IGN DEBUG] restoreIGN error:', err);
-        }
-      }
-    }
-  }
+  // async function restoreIGN() {
+  //   if (loggedIn === true) {
+  //     const persistentUserId = localStorage.getItem('persistentUserId');
+  //     console.log('[IGN DEBUG] restoreIGN persistentUserId:', persistentUserId);
+  //     if (persistentUserId) {
+  //       try {
+  //         const ignFromDb = await getIGNForUserId(persistentUserId);
+  //         console.log('[IGN DEBUG] restoreIGN ignFromDb:', ignFromDb);
+  //         if (ignFromDb) setIGN(ignFromDb);
+  //       } catch (err) {
+  //         console.error('[IGN DEBUG] restoreIGN error:', err);
+  //       }
+  //     }
+  //   }
+  // }
 
   // Clear Appwrite session cookies when showing login screen
   useEffect(() => {
@@ -514,29 +513,29 @@ export default function App() {
       showToast("Price updated and history recorded!");
       // Optionally refresh price history modal if open
       if (priceHistoryModal.open && priceHistoryModal.itemId === itemId) {
-        fetchAndSetPriceHistory(itemId);
+        // fetchAndSetPriceHistory(itemId);
       }
     } catch (e) {
       showToast("Failed to save price. Please try again.");
     }
   }
 
-  async function fetchAndSetPriceHistory(itemId: string, authorIds?: string[]) {
-    // Always sync RXDB with Appwrite before fetching
-    await syncPriceHistoryToRxdb();
-    const entries = await getPriceHistory(itemId, authorIds);
-    setPriceHistory(entries.map((doc: PriceHistoryEntry) => ({
-      $id: doc.$id,
-      itemId: doc.itemId,
-      price: doc.price,
-      date: doc.date,
-      author: doc.author,
-      sold: doc.sold,
-      downvotes: doc.downvotes ?? [],
-      // Map both item_name (snake_case) and itemName (camelCase) to itemName for UI
-      itemName: doc.item_name || undefined,
-    })));
-  }
+  // async function fetchAndSetPriceHistory(itemId: string, authorIds?: string[]) {
+  //   // Always sync RXDB with Appwrite before fetching
+  //   await syncPriceHistoryToRxdb();
+  //   const entries = await getPriceHistory(itemId, authorIds);
+  //   setPriceHistory(entries.map((doc: PriceHistoryEntry) => ({
+  //     $id: doc.$id,
+  //     itemId: doc.itemId,
+  //     price: doc.price,
+  //     date: doc.date,
+  //     author: doc.author,
+  //     sold: doc.sold,
+  //     downvotes: doc.downvotes ?? [],
+  //     // Map both item_name (snake_case) and itemName (camelCase) to itemName for UI
+  //     itemName: doc.item_name || undefined,
+  //   })));
+  // }
 
   function handleInventoryDragEnd(result: DropResult) {
     if (!result.destination || result.source.index === result.destination.index) return;
@@ -571,8 +570,8 @@ export default function App() {
 
   const itemMap = Object.fromEntries(items.map(i => [i.$id, i]));
 
-  const handleCharacterSelect = makeHandleCharacterSelect(characters, setSelectedCharacter);
-  const handleCharacterChange = makeHandleCharacterChange(handleCharacterSelect);
+  // const handleCharacterSelect = makeHandleCharacterSelect(characters, setSelectedCharacter);
+  // const handleCharacterChange = makeHandleCharacterChange(handleCharacterSelect);
   const handleAddCharacter = makeHandleAddCharacter(setCharacters, setSelectedCharacter);
 
   // Character deletion handler
@@ -606,7 +605,7 @@ export default function App() {
     setShopItemModal({ open: false });
   }
 
-  async function handleShopItemSell(count: number) {
+  async function handleShopItemSell(_: number) {
     if (!shopItemModal.itemId) return;
     const itemId = shopItemModal.itemId;
     const price = itemMap[itemId]?.current_selling_price;
@@ -643,24 +642,24 @@ export default function App() {
   }
 
   // Filtering and sorting logic
-  const filteredAndSortedItems = filteredItems
-    .sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
-      else if (sortKey === 'current_selling_price') {
-        const aPrice = a.current_selling_price ?? 0;
-        const bPrice = b.current_selling_price ?? 0;
-        cmp = aPrice - bPrice;
-      }
-      else if (sortKey === 'last_sold') {
-        const aRecent = priceStats[a.$id]?.recent;
-        const aDate = aRecent && aRecent.date ? new Date(aRecent.date).getTime() : 0;
-        const bRecent = priceStats[b.$id]?.recent;
-        const bDate = bRecent && bRecent.date ? new Date(bRecent.date).getTime() : 0;
-        cmp = aDate - bDate;
-      }
-      return sortAsc ? cmp : -cmp;
-    });
+  // const filteredAndSortedItems = filteredItems
+  //   .sort((a, b) => {
+  //     let cmp = 0;
+  //     if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+  //     else if (sortKey === 'current_selling_price') {
+  //       const aPrice = a.current_selling_price ?? 0;
+  //       const bPrice = b.current_selling_price ?? 0;
+  //       cmp = aPrice - bPrice;
+  //     }
+  //     else if (sortKey === 'last_sold') {
+  //       const aRecent = priceStats[a.$id]?.recent;
+  //       const aDate = aRecent && aRecent.date ? new Date(aRecent.date).getTime() : 0;
+  //       const bRecent = priceStats[b.$id]?.recent;
+  //       const bDate = bRecent && bRecent.date ? new Date(bRecent.date).getTime() : 0;
+  //       cmp = aDate - bDate;
+  //     }
+  //     return sortAsc ? cmp : -cmp;
+  //   });
 
   // --- Conditional returns for authentication state ---
   if (loggedIn === null) {
@@ -933,7 +932,7 @@ export default function App() {
         <SellModal
           open={sellModalOpen}
           onClose={() => { setSellModalOpen(false); setSellItem(null); }}
-          onSell={(amt, price) => {
+          onSell={(_, price) => {
             if (sellItem) handleSell(sellItem, price);
             refreshUserKarma();
             setSellModalOpen(false);

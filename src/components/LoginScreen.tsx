@@ -1,8 +1,8 @@
-import React, { useState } from "react";
-import {
-  createAnonymousSessionWithSessionId,
-  restoreSessionWithSessionId,
-} from "../api/auth";
+import { useState } from "react";
+// import {
+//   createAnonymousSessionWithSessionId,
+//   restoreSessionWithSessionId,
+// } from "../api/auth";
 import { createPersistentAnonUser, loginWithPersistentSecret } from '../api/persistentAnon';
 import styles from './LoginScreen.module.css';
 import TitleBar from '../TitleBar';

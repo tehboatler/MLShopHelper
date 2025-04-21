@@ -80,7 +80,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
         Array.isArray(selectedCharacter.shop.order) ? (
           <DragDropContext onDragEnd={handleInventoryDragEnd}>
             <Droppable droppableId="shop-inventory" type="item">
-              {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
+              {(provided: DroppableProvided, _: DroppableStateSnapshot) => (
                 <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 40, paddingBottom: 200 }}>
                   {selectedCharacter.shop.order.map((itemId: string, idx: number) => {
                     const item = itemMap[itemId];

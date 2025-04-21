@@ -6,7 +6,7 @@ const EQUIPMENTS: string[] = [
 const STATS: string[] = [
   "Weapon ATT", "ATT", "Magic Att.", "LUK", "DEX", "STR", "INT", "Jump", "Speed"
 ];
-const PERCENTAGES: string[] = ["10%", "30%", "50%", "60%", "70%", "100%"];
+// const PERCENTAGES: string[] = ["10%", "30%", "50%", "60%", "70%", "100%"];
 
 function normalize(str: string) {
   return str.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -51,7 +51,7 @@ function generateFuzzySuggestions(input: string): string[] {
     "two-handed": "Two-handed Sword",
   };
   const allEquips = [...EQUIPMENTS];
-  Object.entries(equipMap).forEach(([abbr, full]) => {
+  Object.entries(equipMap).forEach(([_, full]) => {
     if (!allEquips.includes(full)) allEquips.push(full);
   });
 

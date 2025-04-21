@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
-interface InventorySection {
-  id: string;
-  name: string;
-  itemIds: number[];
-}
+// interface InventorySection {
+//   id: string;
+//   name: string;
+//   itemIds: number[];
+// }
 
 interface SectionHeaderProps {
   name: string;

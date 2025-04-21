@@ -48,22 +48,22 @@ export default function InventoryTable({
   setSearch,
   setModalOpen,
   tableContainerRef,
-  tableScrollTop,
+  // tableScrollTop,
   sortKey,
   sortAsc,
   handleSort,
-  itemMap,
-  selectedCharacter,
+  // itemMap,
+  // selectedCharacter,
   userPriceMap,
   priceStats,
   handleInventoryContextMenu,
-  highlightedRow,
+  // highlightedRow,
   handleOpenStockDialog,
   setSellItem,
   setSellModalOpen,
   openHistoryModal,
-  filterByFriends,
-  friendsWhitelist
+  // filterByFriends,
+  // friendsWhitelist
 }: InventoryTableProps) {
   // Fix priceStats typing for indexed access
   const getRecentPrice = (itemId: string) => priceStats[itemId]?.recent;
@@ -198,8 +198,8 @@ export default function InventoryTable({
   });
 
   // For type-safe percentile/avg keys
-  const statKeys = ['p25', 'p50', 'p75', 'avg'] as const;
-  type StatKey = typeof statKeys[number];
+  // const statKeys = ['p25', 'p50', 'p75', 'avg'] as const;
+  // type StatKey = typeof statKeys[number];
 
   // Limit visible items to 7 for performance, unless searching
   const visibleRows = search.trim().length > 0

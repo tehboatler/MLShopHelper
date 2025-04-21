@@ -11,7 +11,7 @@ const anonLinksCollectionId = import.meta.env.VITE_APPWRITE_ANON_LINKS_COLLECTIO
 
 export async function createPersistentAnonUser(): Promise<{ user: Models.User<any>, secret: string }> {
   // 1. Create anonymous session
-  const session = await account.createAnonymousSession();
+  // const session = await account.createAnonymousSession();
   const user = await account.get();
   // 2. Generate a persistent secret
   const secret = crypto.randomUUID();

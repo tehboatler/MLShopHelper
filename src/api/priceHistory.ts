@@ -1,5 +1,5 @@
 import { databases } from "../lib/appwrite";
-import { ID, Query } from "appwrite";
+import { Query } from "appwrite";
 import type { PriceHistoryEntry } from "../types";
 import { updateUserKarma } from "./persistentAnon";
 
@@ -47,7 +47,7 @@ export async function addPriceHistoryEntry(data: Omit<PriceHistoryEntry, "$id"> 
 }
 
 // --- RXDB integration (minimal, now primary logic) ---
-import { getDb, replicatePriceHistorySandbox } from '../rxdb';
+import { getDb } from '../rxdb';
 import { addPriceHistoryEntryRX } from '../priceHistoryRXDB';
 
 /**

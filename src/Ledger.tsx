@@ -3,19 +3,19 @@ import { LedgerToggle, LedgerMode } from "./LedgerToggle";
 import { LedgerList } from "./LedgerList";
 import type { PriceHistoryEntry, Item } from "./types";
 import { getPersistentAnonUsersInfoBatch } from "./api/persistentAnon";
-import { liveQuery } from 'dexie';
+// import { liveQuery } from 'dexie';
 
 export const Ledger: React.FC = () => {
   const [mode, setMode] = useState<LedgerMode>("personal");
   const [entries, setEntries] = useState<PriceHistoryEntry[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [_, setLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [itemMap, setItemMap] = useState<Record<string, Item>>({});
-  const [authorIGNMap, setAuthorIGNMap] = useState<Record<string, string>>({});
+  const [__, setAuthorIGNMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    let cancelled = false;
+    // let cancelled = false;
     // Always use persistentUserId from localStorage
     const persistentUserId = localStorage.getItem('persistentUserId') || null;
     setUserId(persistentUserId);
@@ -68,7 +68,7 @@ export const Ledger: React.FC = () => {
         setLoading(false);
       });
     })();
-    return () => { cancelled = true; ignore = true; if (sub) sub.unsubscribe(); };
+    return () => { ignore = true; if (sub) sub.unsubscribe(); };
   }, []);
 
   // Filtered entries: ensure personal tab only shows current persistent user

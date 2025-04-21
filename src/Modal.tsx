@@ -22,9 +22,9 @@ const getModalContentWidthStyles = ({ alignTopLeft, width }: { alignTopLeft: boo
   };
 };
 
-export function Modal({ open, onClose, children, disableEsc = false, width, title, noPadding = false, alignTopLeft = false }: ModalProps) {
+export function Modal({ open, onClose, children, disableEsc = false, width, title, alignTopLeft = false }: ModalProps) {
   const [show, setShow] = useState(open);
-  const [animating, setAnimating] = useState(false);
+  const [_, setAnimating] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

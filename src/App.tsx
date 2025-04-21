@@ -49,6 +49,7 @@ import { useRxdbItems } from './hooks/useRxdbItems';
 import { addPriceHistoryEntry } from './api/priceHistory';
 import { updateItem } from './api/items';
 import { debugAppwriteSession } from './debugAppwriteSession';
+import { subscribeToAppwriteRealtimeForItems } from './rxdb';
 
 export default function App() {
   // --- All hooks and state declarations ---
@@ -57,6 +58,12 @@ export default function App() {
   const [userKarma, setUserKarma] = useState<number | null>(null);
   // Only fetch RxDB items if authenticated
   const items = useRxdbItems(!!loggedIn);
+
+  // Subscribe to Appwrite Realtime for items once on app mount
+  useEffect(() => {
+    subscribeToAppwriteRealtimeForItems();
+  }, []);
+
   useEffect(() => {
     console.log('[DEBUG] RxDB items:', items);
     if (Array.isArray(items) && items.length > 0) {

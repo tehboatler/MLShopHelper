@@ -247,28 +247,28 @@ export default function InventoryTable({
   // Context menu state for main item table
   const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; itemId: string | null }>({ open: false, x: 0, y: 0, itemId: null });
 
-  // Refresh items function (calls parent fetch if available)
-  const refreshItems = () => {
-    if (typeof window !== 'undefined' && window.location) {
-      window.location.reload(); // fallback, or trigger parent fetch if available
-    }
-  };
-
-  // Handler for right click/context menu
-  const handleMainTableContextMenu = (e: React.MouseEvent, itemId: string) => {
-    e.preventDefault();
-    setContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
-  };
-
   // Delete handler for main table
   const handleDelete = async () => {
     if (!contextMenu.itemId) return;
     try {
       await deleteItem(contextMenu.itemId);
-      refreshItems();
+      // No need to refresh, RxDB + React will update the UI automatically!
     } catch (err) {
       alert('Failed to delete item: ' + (err?.toString() || err));
     }
+  };
+
+  // Refresh items function (calls parent fetch if available)
+  // const refreshItems = () => {
+  //   if (typeof window !== 'undefined' && window.location) {
+  //     window.location.reload(); // fallback, or trigger parent fetch if available
+  //   }
+  // };
+
+  // Handler for right click/context menu
+  const handleMainTableContextMenu = (e: React.MouseEvent, itemId: string) => {
+    e.preventDefault();
+    setContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
   };
 
   return (

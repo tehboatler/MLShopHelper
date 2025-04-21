@@ -1,4 +1,4 @@
-import { databases } from "../lib/appwrite";
+import { databases, account } from "../lib/appwrite";
 import { getDb } from '../rxdb';
 import { nanoid } from 'nanoid';
 
@@ -26,5 +26,19 @@ export async function updateItem(id: string, data: Partial<{ name: string; price
 }
 
 export async function deleteItem(id: string) {
+  // Debug: check current session and user before attempting delete
+  try {
+    const session = await account.getSession("current");
+    console.log("[deleteItem] Current session:", session);
+  } catch (err) {
+    console.warn("[deleteItem] No active session:", err);
+  }
+  try {
+    const user = await account.get();
+    console.log("[deleteItem] Current user:", user);
+  } catch (err) {
+    console.warn("[deleteItem] No user found:", err);
+  }
+  // Proceed with delete
   return databases.deleteDocument(databaseId, collectionId, id);
 }

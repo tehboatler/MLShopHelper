@@ -229,3 +229,31 @@ function percentile(arr: number[], p: number): number | null {
   if (lower === upper) return arr[lower];
   return arr[lower] + (arr[upper] - arr[lower]) * (idx - lower);
 }
+
+// --- Appwrite Realtime subscription for RxDB sync ---
+import { client } from './lib/appwrite';
+
+export function subscribeToAppwriteRealtimeForItems() {
+  const databaseId = import.meta.env.VITE_APPWRITE_DATABASE!;
+  const collectionId = import.meta.env.VITE_APPWRITE_ITEMS_COLLECTION!;
+  getDb().then(db => {
+    client.subscribe([
+      `databases.${databaseId}.collections.${collectionId}.documents`
+    ], async (response: any) => {
+      const events = response.events as string[];
+      const payload = response.payload;
+      if (events.some(e => e.endsWith('.delete'))) {
+        // Document deleted remotely: remove from RxDB
+        const doc = await db.items.findOne(payload.$id).exec();
+        if (doc) await doc.remove();
+      } else if (events.some(e => e.endsWith('.create') || e.endsWith('.update'))) {
+        // Document created/updated remotely: upsert into RxDB
+        // Ensure the id field is set
+        const item = { ...payload, id: payload.$id };
+        await db.items.upsert(item);
+      }
+    });
+  });
+}
+
+// Call subscribeToAppwriteRealtimeForItems() once at app startup (e.g. in App.tsx)

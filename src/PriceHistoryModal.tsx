@@ -305,8 +305,29 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
     state: {},
   });
 
+  // --- Utility: Filter outliers using IQR method ---
+  function filterOutliers(prices: number[]): number[] {
+    if (prices.length < 4) return prices;
+    const sorted = [...prices].sort((a, b) => a - b);
+    const q1 = percentile(sorted, 0.25);
+    const q3 = percentile(sorted, 0.75);
+    const iqr = q3 - q1;
+    const lower = q1 - 1.5 * iqr;
+    const upper = q3 + 1.5 * iqr;
+    return sorted.filter(p => p >= lower && p <= upper);
+  }
+
+  // --- Helper: percentile ---
+  function percentile(sorted: number[], p: number): number {
+    const idx = (sorted.length - 1) * p;
+    const lower = Math.floor(idx);
+    const upper = Math.ceil(idx);
+    if (lower === upper) return sorted[lower];
+    return sorted[lower] + (sorted[upper] - sorted[lower]) * (idx - lower);
+  }
+
   // --- Boxplot data aggregation ---
-  function getBoxplotStats(prices: number[]) {
+  function getBoxplotStats(prices: number[]): { min: number; max: number; p25: number; p50: number; p75: number; avg: number } {
     if (!prices.length) return { min: 0, max: 0, p25: 0, p50: 0, p75: 0, avg: 0 };
     const sorted = [...prices].sort((a, b) => a - b);
     const min = sorted[0];
@@ -325,7 +346,7 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
     return { min, max, p25, p50, p75, avg };
   }
 
-  // Group by date (YYYY-MM-DD)
+  // Group by date (YYYY-MM-DD), filter outliers for each day
   const boxplotData = Object.values(
     filteredHistory.reduce((acc, entry) => {
       const d = formatDate(entry.date);
@@ -333,9 +354,10 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
       acc[d].prices.push(entry.price);
       return acc;
     }, {} as Record<string, { date: string; prices: number[] }>)
-  ).map(({ date, prices }) => ({ date, ...getBoxplotStats(prices) }));
-
-  // console.log('boxplotData', boxplotData);
+  ).map(({ date, prices }) => {
+    const filtered = filterOutliers(prices);
+    return { date, ...getBoxplotStats(filtered), filteredPrices: filtered };
+  });
 
   // Pad boxplotData if only one day, to force Recharts to render axes
   const paddedBoxplotData = boxplotData.length === 1
@@ -386,10 +408,10 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
                 {/* --- Plotly Boxplot (responsive, dark mode) --- */}
                 <Plot
                   data={[
-                    // Box traces for each day
+                    // Box traces for each day (filtered)
                     ...paddedBoxplotData.map(d => ({
                       type: 'box',
-                      y: filteredHistory.filter(e => formatDate(e.date) === d.date).map(e => e.price),
+                      y: d.filteredPrices,
                       name: d.date,
                       boxpoints: 'outliers',
                       marker: { color: '#2d8cff' },
@@ -399,15 +421,6 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
                       showlegend: false,
                     })),
                     // Scatter overlay for all points
-                    {
-                      type: 'scatter',
-                      y: filteredHistory.map(e => e.price),
-                      x: filteredHistory.map(e => formatDate(e.date, 'yyyy-MM-dd')),
-                      mode: 'markers',
-                      marker: { color: '#f55', size: 10, opacity: 0.7 },
-                      name: 'Sales',
-                      showlegend: false,
-                    }
                   ]}
                   layout={{
                     autosize: true,
@@ -435,6 +448,9 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
                   useResizeHandler={true}
                   style={{ width: '100%', height: '320px' }}
                 />
+                <div style={{ color: '#aaa', fontSize: 13, marginTop: 6, textAlign: 'center' }}>
+                  Extreme outliers are hidden for clarity (IQR method).
+                </div>
               </div>
             ) : (
               <div style={{ color: '#888', margin: '24px 0', textAlign: 'center' }}>

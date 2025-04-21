@@ -45,6 +45,8 @@ import {
   handleRecordSale as makeHandleRecordSale
 } from './handlers/inventoryHandlers';
 import { getDb } from './rxdb';
+import { syncPriceHistoryToRxdb } from './api/priceHistory';
+import Ledger from "./Ledger";
 
 export default function App() {
   // --- All hooks and state declarations ---
@@ -227,20 +229,36 @@ export default function App() {
     toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
   }
 
+  // --- Utility: Appwrite-compliant ID generator ---
+  function makeAppwriteId(itemId: string, userId: string) {
+    const safeDate = new Date().toISOString().replace(/[^a-zA-Z0-9]/g, '').slice(0, 14);
+    return `${itemId.slice(0, 12)}-${safeDate}-${userId.slice(0, 8)}`.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 36);
+  }
+
   // --- All useEffect hooks ---
   useEffect(() => {
     ensureAnonymousSession();
   }, []);
 
   useEffect(() => {
-    getCurrentUser().then((user) => {
-      if (user) {
-        setLoggedIn(true);
-        setUserId(user.$id);
-      } else {
+    async function checkAuth() {
+      const persistentSecret = localStorage.getItem('persistentSecret');
+      const persistentUserId = localStorage.getItem('persistentUserId');
+      try {
+        const user = await getCurrentUser();
+        if (user && persistentSecret && persistentUserId) {
+          setLoggedIn(true);
+          setUserId(user.$id);
+        } else {
+          setLoggedIn(false);
+          setUserId(null);
+        }
+      } catch (e) {
         setLoggedIn(false);
+        setUserId(null);
       }
-    });
+    }
+    checkAuth();
   }, []);
 
   // Consolidated: Fetch items when logged in, then fetch user prices when items and userId are ready
@@ -342,10 +360,12 @@ export default function App() {
     }
   }
 
-  // --- Conditional return for login ---
-  if (loggedIn === false) {
-    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
-  }
+  // Clear Appwrite session cookies when showing login screen
+  useEffect(() => {
+    if (loggedIn === false) {
+      import('./api/auth').then(({ logout }) => logout());
+    }
+  }, [loggedIn]);
 
   // --- Memoized Fuse instance and filteredItems ---
   const fuse = useMemo(() => new Fuse(items, { keys: ["name", "notes"] }), [items]);
@@ -423,24 +443,41 @@ export default function App() {
       console.warn('[Sell] persistentUserId missing; aborting sell.');
       return;
     }
-    await handleChangePrice(item.$id.toString(), price, undefined, true);
+    // Pass itemName to handleChangePrice
+    await handleChangePrice(item.$id.toString(), price, undefined, true, item.name);
     fetchItems();
     await fetchUserPrices(); // Ensure user price map is refreshed after sale
     await refreshUserKarma(); // Ensure karma is refreshed after sale
   }
 
-  async function handleChangePrice(itemId: string, newPrice: number, notes?: string, isSale?: boolean) {
+  // Add itemName param and pass it into the price history entry
+  async function handleChangePrice(itemId: string, newPrice: number, notes?: string, isSale?: boolean, itemName?: string) {
     const persistentUserId = localStorage.getItem('persistentUserId');
+    // Fetch IGN for the user
+    let author_ign = undefined;
+    try {
+      if (persistentUserId) {
+        // Dynamic import to avoid circular deps if any
+        const { getIGNForUserId } = await import('./api/anonLinks');
+        author_ign = await getIGNForUserId(persistentUserId);
+      }
+    } catch (err) {
+      console.warn('[handleChangePrice] Failed to fetch IGN:', err);
+    }
+    const id = makeAppwriteId(itemId, persistentUserId || '');
     const priceHistoryEntry = {
+      id,
       itemId,
       price: newPrice,
       date: new Date().toISOString(),
       author: persistentUserId || '',
+      ...(author_ign ? { author_ign } : {}),
       notes,
-      ...(isSale ? { sold: true } : {})
+      ...(isSale ? { sold: true } : {}),
+      ...(itemName ? { item_name: itemName } : {})
     };
     const updateObj = { price: newPrice };
-    console.debug('[Sell] handleChangePrice called with:', { itemId, newPrice, notes, isSale });
+    console.debug('[Sell] handleChangePrice called with:', { itemId, newPrice, notes, isSale, itemName });
     console.debug('[Sell] priceHistoryEntry:', priceHistoryEntry);
     console.debug('[Sell] updateObj:', updateObj);
     try {
@@ -458,17 +495,19 @@ export default function App() {
   }
 
   async function fetchAndSetPriceHistory(itemId: string, authorIds?: string[]) {
-    const res = await getPriceHistory(itemId, authorIds);
-    // Appwrite returns res.documents as Document[], which may have extra fields. We'll map it to PriceHistoryEntry[]
-    setPriceHistory(res.documents.map(doc => ({
+    // Always sync RXDB with Appwrite before fetching
+    await syncPriceHistoryToRxdb();
+    const entries = await getPriceHistory(itemId, authorIds);
+    setPriceHistory(entries.map((doc: PriceHistoryEntry) => ({
       $id: doc.$id,
       itemId: doc.itemId,
       price: doc.price,
       date: doc.date,
       author: doc.author,
-      notes: doc.notes,
       sold: doc.sold,
       downvotes: doc.downvotes ?? [],
+      // Map both item_name (snake_case) and itemName (camelCase) to itemName for UI
+      itemName: doc.item_name || undefined,
     })));
   }
 
@@ -596,6 +635,15 @@ export default function App() {
       return sortAsc ? cmp : -cmp;
     });
 
+  // --- Conditional returns for authentication state ---
+  if (loggedIn === null) {
+    // Still checking auth, render nothing or a loading spinner
+    return null;
+  }
+  if (loggedIn === false) {
+    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+  }
+
   return (
     <UISettingsContext.Provider value={{ round50k, showUnsold, setRound50k, setShowUnsold, compactMode, setCompactMode }}>
       <TitleBar />
@@ -608,7 +656,7 @@ export default function App() {
         userKarma={userKarma}
       />
       {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
-      <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 16 }}>
+      <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 0 }}>
         {addCharacterPrompt && (
           <div style={{
             position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -720,9 +768,7 @@ export default function App() {
                 />
               )}
               {inventoryTab === 'ledger' && (
-                <div style={{ color: '#aaa', padding: 24, fontSize: 16, textAlign: 'center' }}>
-                  Ledger functionality coming soon.
-                </div>
+                <Ledger />
               )}
             </div>
           </aside>
@@ -837,9 +883,17 @@ export default function App() {
             itemId={priceHistoryModal.itemId ?? ''}
             itemName={itemMap[priceHistoryModal.itemId]?.name || ''}
             currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.current_selling_price ?? 0}
-            onSetPrice={(newPrice: number) => {
-              updateLocalAndStatePrice(priceHistoryModal.itemId ?? '', newPrice);
-              showToast("Price updated and history recorded!");
+            onSetPrice={async (newPrice) => {
+              if (priceHistoryModal.itemId) {
+                await handleChangePrice(
+                  priceHistoryModal.itemId,
+                  newPrice,
+                  undefined,
+                  false,
+                  itemMap[priceHistoryModal.itemId]?.name
+                );
+                // Optionally, fetchItems() or fetchUserPrices() if needed for full refresh
+              }
             }}
           />
         )}

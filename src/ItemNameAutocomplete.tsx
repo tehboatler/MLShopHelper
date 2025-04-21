@@ -35,9 +35,10 @@ function generateFuzzySuggestions(input: string): string[] {
     "pet": "Pet Equip.",
     "top": "Topwear",
     "bottom": "Bottomwear",
-    "overall": "Overall",
+    "overall": "Overall Armor",
     "helm": "Helmet",
     "glove": "Gloves",
+    "gun": "Gun",
     "cape": "Cape",
     "claw": "Claw",
     "staff": "Staff",
@@ -45,6 +46,9 @@ function generateFuzzySuggestions(input: string): string[] {
     "knuckle": "Knuckle",
     "shoes": "Shoes",
     "shield": "Shield",
+    "sword": "Sword",
+    "one-handed": "One-handed Sword",
+    "two-handed": "Two-handed Sword",
   };
   const allEquips = [...EQUIPMENTS];
   Object.entries(equipMap).forEach(([abbr, full]) => {

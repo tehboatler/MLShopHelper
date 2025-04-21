@@ -15,24 +15,57 @@ export async function getRecentPriceHistory(itemId: string) {
 }
 
 export async function addPriceHistoryEntryRX(entry: any) {
+  // Add this log to see the raw entry as received by addPriceHistoryEntryRX
+  console.log('addPriceHistoryEntryRX raw entry', entry);
   const db = await getDb();
+  // Use $id as the primary key from Appwrite, but store as 'id' in RXDB
+  const docId = entry.$id || entry.id;
+  if (!docId) {
+    throw new Error('Entry must have $id or id');
+  }
+  // Always store as 'id', not '$id'
+  const rxdbEntry = { ...entry, id: docId };
+  delete rxdbEntry.$id;
   // Check if document with this id already exists
-  const existing = await db.priceHistory.findOne({ selector: { id: entry.id } }).exec();
+  let existing = await db.priceHistory.findOne({ selector: { id: docId } }).exec();
   if (existing) {
     // Compare fields, update if different (shallow compare for now)
     const existingData = existing.toJSON();
     let needsUpdate = false;
-    for (const k of Object.keys(entry)) {
-      if (entry[k] !== existingData[k]) {
+    for (const k of Object.keys(rxdbEntry)) {
+      if (rxdbEntry[k] !== existingData[k]) {
         needsUpdate = true;
         break;
       }
     }
     if (needsUpdate) {
-      await existing.atomicPatch({ ...entry });
+      await existing.patch({ ...rxdbEntry });
     }
   } else {
-    await db.priceHistory.insert(entry);
+    try {
+      await db.priceHistory.insert(rxdbEntry);
+    } catch (e: any) {
+      // Safely check for conflict error (409) in a type-safe way
+      const isConflict = !!(
+        e &&
+        typeof e === 'object' &&
+        'parameters' in e &&
+        e.parameters &&
+        typeof e.parameters === 'object' &&
+        e.parameters.writeError &&
+        e.parameters.writeError.status === 409
+      );
+      if (isConflict) {
+        existing = await db.priceHistory.findOne({ selector: { id: docId } }).exec();
+        if (existing) {
+          await existing.patch({ ...rxdbEntry });
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
   }
   // Optionally prune old entries for this item
   const cutoff = new Date();
@@ -40,7 +73,7 @@ export async function addPriceHistoryEntryRX(entry: any) {
   const cutoffISO = cutoff.toISOString();
   const old = await db.priceHistory.find({
     selector: {
-      itemId: entry.itemId,
+      itemId: rxdbEntry.itemId,
       date: { $lt: cutoffISO }
     }
   }).exec();

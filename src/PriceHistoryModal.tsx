@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Modal } from "./Modal";
 import { ChangePriceModal } from "./ChangePriceModal";
-import { getRecentPriceHistory, addPriceHistoryEntryRX } from './priceHistoryRXDB';
+import { getPriceHistory, syncPriceHistoryToRxdb, addPriceHistoryEntry } from './api/priceHistory';
+import { getRecentPriceHistory } from './priceHistoryRXDB';
 import { getIGNForUserId } from "./api/anonLinks";
 import { getPersistentAnonUsersInfoBatch } from "./api/persistentAnon";
 import { updateUserKarma } from "./api/persistentAnon";
@@ -15,6 +16,7 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import type { PriceHistoryEntry } from "./types";
+import { getDb, replicatePriceHistorySandbox } from './rxdb';
 
 interface PriceHistoryModalProps {
   open: boolean;
@@ -71,90 +73,65 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
   const [currentUserIGN, setCurrentUserIGN] = useState<string>("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [downvoteLoading, setDownvoteLoading] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(false);
+  const replicationRef = useRef<any>(null);
 
   useEffect(() => {
-    if (open && itemId) {
-      let isMounted = true;
-      // 1. Instantly load and display RXDB data
-      (async () => {
-        const rxdbEntries = await getRecentPriceHistory(itemId.toString());
-        if (!isMounted) return;
-        setPriceHistory(rxdbEntries.map(doc => ({
-          $id: doc.id,
-          itemId: doc.itemId,
-          price: doc.price,
-          date: doc.date,
-          author: doc.author,
-          sold: !!doc.sold,
-          notes: doc.notes,
-          downvotes: doc.downvotes || [],
-        })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        const uniqueAuthors = Array.from(new Set(rxdbEntries.map(e => e.author)));
-        const userInfo = await batchFetchUserInfo(uniqueAuthors);
-        if (!isMounted) return;
-        setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
-        setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
-      })();
-      // 2. In the background, sync with Appwrite and update if needed
-      (async () => {
-        const rxdbEntries = await getRecentPriceHistory(itemId.toString());
-        let watermark: string | null = null;
-        if (rxdbEntries.length > 0) {
-          watermark = rxdbEntries[0].date;
-        }
-        let appwriteEntries = [];
-        if (watermark) {
-          const { Query } = await import('appwrite');
-          const { databases } = await import('./lib/appwrite');
-          const databaseId = import.meta.env.VITE_APPWRITE_DATABASE;
-          const collectionId = import.meta.env.VITE_APPWRITE_PRICE_HISTORY_COLLECTION;
-          const queries = [
-            Query.equal("itemId", itemId.toString()),
-            Query.greaterThan("date", watermark),
-            Query.limit(1000)
-          ];
-          const res = await databases.listDocuments(databaseId, collectionId, queries);
-          appwriteEntries = res.documents;
-        } else {
-          const { documents } = await import('./api/priceHistory').then(m => m.getPriceHistory(itemId.toString()));
-          appwriteEntries = documents;
-        }
-        const rxdbIds = new Set(rxdbEntries.map(e => e.id));
-        let inserted = false;
-        for (const entry of appwriteEntries) {
-          if (!rxdbIds.has(entry.$id)) {
-            await addPriceHistoryEntryRX({
-              id: entry.$id || `${entry.itemId}-${entry.date}-${entry.author}`,
-              itemId: entry.itemId,
-              price: entry.price,
-              date: entry.date,
-              author: entry.author,
-              sold: !!entry.sold,
-              notes: entry.notes ?? '',
-            });
-            inserted = true;
-          }
-        }
-        if (inserted && isMounted) {
-          const entries = await getRecentPriceHistory(itemId.toString());
-          setPriceHistory(entries.map(doc => ({
-            $id: doc.id,
+    let isCancelled = false;
+    let sub: any;
+    let replicationState: any;
+    async function setupLiveReplication() {
+      setLoading(true);
+      const db = await getDb();
+      // Start/refresh live replication for this item
+      if (replicationRef.current) {
+        replicationRef.current.cancel();
+      }
+      replicationState = await replicatePriceHistorySandbox(db);
+      // --- Replication event logging for debugging ---
+      if (replicationState) {
+        replicationState.error$?.subscribe((err: any) => console.error('Replication error:', err));
+        replicationState.active$?.subscribe((active: boolean) => console.log('Replication active:', active));
+        replicationState.received$?.subscribe((doc: any) => console.log('Replication received doc:', doc));
+      }
+      replicationRef.current = replicationState;
+      // Subscribe to RXDB query for this item
+      const query = db.priceHistory.find({
+        selector: {
+          itemId: itemId.toString(),
+          date: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
+        },
+        sort: [{ date: 'desc' }],
+      });
+      sub = query.$.subscribe((docs: any[]) => {
+        if (!isCancelled) {
+          setPriceHistory(docs.map(doc => ({
+            $id: doc.$id,
             itemId: doc.itemId,
             price: doc.price,
             date: doc.date,
             author: doc.author,
-            sold: !!doc.sold,
+            author_ign: doc.author_ign !== undefined ? doc.author_ign : doc.author,
             notes: doc.notes,
+            sold: !!doc.sold,
             downvotes: doc.downvotes || [],
-          })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-          const uniqueAuthors = Array.from(new Set(entries.map(e => e.author)));
-          const userInfo = await batchFetchUserInfo(uniqueAuthors);
-          setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
-          setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
+            item_name: doc.item_name || undefined,
+          })));
         }
-      })();
-      return () => { isMounted = false; };
+      });
+      setLoading(false);
     }
+    if (open) {
+      setupLiveReplication();
+    }
+    return () => {
+      isCancelled = true;
+      if (sub) sub.unsubscribe();
+      if (replicationRef.current) {
+        replicationRef.current.cancel();
+        replicationRef.current = null;
+      }
+    };
   }, [open, itemId]);
 
   useEffect(() => {
@@ -195,8 +172,7 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
       header: () => <span style={{ textAlign: 'left', display: 'block', width: '100%' }}>User</span>,
       cell: info => {
         const entry = info.row.original;
-        const ign = authorIGNMap[entry.author];
-        // console.log('[PriceHistoryModal] Rendering author cell:', { entry, ign, authorIGNMap });
+        const ign = entry.author_ign || authorIGNMap[entry.author];
         return (
           <span>
             {ign ? (
@@ -460,41 +436,10 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
               open={changeModalOpen}
               onClose={() => setChangeModalOpen(false)}
               currentPrice={currentPrice}
-              onSetPrice={async newPrice => {
-                // Add new price history entry to RXDB
-                if (typeof itemId !== 'undefined' && itemId && currentUserId) {
-                  await addPriceHistoryEntryRX({
-                    id: `${itemId}-${Date.now()}`,
-                    itemId,
-                    price: newPrice,
-                    date: new Date().toISOString(),
-                    author: currentUserId,
-                    sold: false,
-                    notes: '',
-                  });
-                  // Refresh price history from RXDB
-                  const entries = await getRecentPriceHistory(itemId.toString());
-                  setPriceHistory(entries.map(doc => ({
-                    $id: doc.id,
-                    itemId: doc.itemId,
-                    price: doc.price,
-                    date: doc.date,
-                    author: doc.author,
-                    sold: !!doc.sold,
-                    notes: doc.notes,
-                    downvotes: doc.downvotes || [],
-                  })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())); // Most recent first
-                  const uniqueAuthors = Array.from(new Set(entries.map(e => e.author)));
-                  const userInfo = await batchFetchUserInfo(uniqueAuthors);
-                  setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
-                  setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
-                }
-                if (typeof onSetPrice === 'function') onSetPrice(newPrice);
-                setChangeModalOpen(false);
-              }}
+              onSetPrice={onSetPrice}
               itemId={itemId}
               title={`Change Price for ${itemName}`}
-              itemName={itemName}
+              item_name={itemName}
             />
           </div>
         </div>

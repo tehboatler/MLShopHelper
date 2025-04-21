@@ -11,13 +11,13 @@ export interface Item {
 }
 
 export interface PriceHistoryEntry {
-  $id: string;
+  $id: string;     // Appwrite document ID, always present and used as the primary key
   itemId: string;
   price: number;
   date: string;
   author: string; // user_id
   author_ign?: string; // display IGN
-  notes?: string;
+  item_name?: string; // denormalized item name
   sold?: boolean;
   downvotes?: string[]; // array of userIds who downvoted this entry
 }

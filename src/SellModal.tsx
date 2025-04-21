@@ -5,7 +5,7 @@ interface SellModalProps {
   open: boolean;
   onClose: () => void;
   onSell: (amount: number, price: number, markUnowned?: boolean) => void;
-  itemName: string;
+  itemName?: string;
   userPrice?: number;
   defaultPrice?: number;
 }

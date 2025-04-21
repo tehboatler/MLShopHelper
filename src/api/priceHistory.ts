@@ -11,45 +11,95 @@ const collectionId = import.meta.env.VITE_APPWRITE_PRICE_HISTORY_COLLECTION!;
  * @param data The price history entry data to add.
  * @returns The newly created document.
  */
-export async function addPriceHistoryEntry(data: Omit<PriceHistoryEntry, "$id">) {
-  const res = await databases.createDocument(databaseId, collectionId, ID.unique(), data);
-  // Increment karma for the author ONLY if sold is true
-  if (data.author && data.sold) {
-    try {
-      await updateUserKarma(data.author, 1);
-    } catch (e) {
-      // Optionally log error, but don't block entry creation
-      console.warn('Failed to increment karma for user', data.author, e);
+export async function addPriceHistoryEntry(data: Omit<PriceHistoryEntry, "$id"> & { $id?: string; id?: string }) {
+  // Remove undefined fields and $id/id from payload
+  const cleanEntry: any = {};
+  for (const key of Object.keys(data) as (keyof typeof data)[]) {
+    if (
+      data[key] !== undefined &&
+      key !== '$id' &&
+      key !== 'id'
+    ) {
+      cleanEntry[key] = data[key];
     }
   }
-  return res;
+  // Use $id or id as the document ID ONLY as the 3rd argument
+  const customId = (data as any).$id || (data as any).id || 'unique()';
+  console.log('[addPriceHistoryEntry] Payload:', cleanEntry, 'CustomId:', customId);
+
+  try {
+    const res = await databases.createDocument(databaseId, collectionId, customId, cleanEntry);
+    console.log('[addPriceHistoryEntry] Success:', res);
+    // Increment karma for the author ONLY if sold is true
+    if (data.author && data.sold) {
+      try {
+        await updateUserKarma(data.author, 1);
+      } catch (e) {
+        // Optionally log error, but don't block entry creation
+        console.warn('Failed to increment karma for user', data.author, e);
+      }
+    }
+    return res;
+  } catch (err: any) {
+    console.error('[addPriceHistoryEntry] Error:', err); // log the full error object
+    throw err;
+  }
+}
+
+// --- RXDB integration (minimal, now primary logic) ---
+import { getDb, replicatePriceHistorySandbox } from '../rxdb';
+import { addPriceHistoryEntryRX } from '../priceHistoryRXDB';
+
+/**
+ * Run a one-off sync to pull price history from Appwrite into RXDB.
+ * Returns the replication state for further inspection if needed.
+ */
+export async function syncPriceHistoryToRxdb(itemId?: string) {
+  // Only fetch entries for a specific item if itemId is provided
+  const queries = itemId ? [Query.equal('itemId', itemId), Query.orderDesc('date'), Query.limit(30)] : [Query.orderDesc('date'), Query.limit(100)];
+  const res = await databases.listDocuments(databaseId, collectionId, queries);
+  for (const doc of res.documents) {
+    await addPriceHistoryEntryRX({
+      $id: doc.$id,
+      itemId: doc.itemId,
+      price: doc.price,
+      date: doc.date,
+      author: doc.author,
+      author_ign: doc.author_ign || '',
+      sold: !!doc.sold,
+      downvotes: doc.downvotes || [],
+      item_name: doc.item_name || undefined,
+    });
+  }
 }
 
 /**
- * Fetch price history entries for a given item.
- * @param itemId The ID of the item to fetch price history for.
- * @param authorIds Optional list of author IDs to filter by.
- * @returns The list of price history entries.
+ * Fetch recent price history for an item from RXDB (local cache).
+ * This replaces the previous getPriceHistory logic.
+ * @param itemId
+ * @param authorIds (optional, not yet supported in RXDB version)
+ * @returns Array of price history entries from RXDB
  */
 export async function getPriceHistory(itemId: string, authorIds?: string[]) {
-  const queries = [
-    Query.equal("itemId", itemId),
-    Query.limit(1000), // Increase limit to avoid silent truncation
-  ];
+  const db = await getDb();
+  // Example: fetch last 30 days, sorted desc
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffISO = cutoff.toISOString();
+  const selector: any = {
+    itemId,
+    date: { $gte: cutoffISO }
+  };
+  // Optionally filter by authorIds if provided
   if (authorIds && authorIds.length > 0) {
-    queries.push(Query.equal("author", authorIds));
+    selector.author = { $in: authorIds };
   }
-  try {
-    const res = await databases.listDocuments(databaseId, collectionId, queries);
-    console.log(`[getPriceHistory] Returned ${res.documents.length} entries for itemId=${itemId}`);
-    if (res.documents.length === 1000) {
-      console.warn(`[getPriceHistory] Hit fetch limit for itemId=${itemId}. Results may be truncated.`);
-    }
-    return res;
-  } catch (err) {
-    console.error(`[getPriceHistory] Error fetching price history for itemId=${itemId}:`, err);
-    throw err;
-  }
+  const docs = await db.priceHistory.find({
+    selector,
+    sort: [{ date: 'desc' }]
+  }).exec();
+  // Map to plain objects (compatibility with previous usage)
+  return docs.map(d => d._data || d);
 }
 
 // Fetch all price history entries for a given user (for all items)
@@ -237,4 +287,24 @@ export async function getLatestSoldEntriesBatch(itemIds: string[]): Promise<Map<
     }
   }
   return latestMap;
+}
+
+/**
+ * Fetch recent price history for an item from RXDB (local cache).
+ * @param itemId
+ */
+export async function getRecentPriceHistoryFromRxdb(itemId: string) {
+  const db = await getDb();
+  // Example: fetch last 30 days, sorted desc
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffISO = cutoff.toISOString();
+  const docs = await db.priceHistory.find({
+    selector: {
+      itemId,
+      date: { $gte: cutoffISO }
+    },
+    sort: [{ date: 'desc' }]
+  }).exec();
+  return docs.map(d => d._data || d);
 }

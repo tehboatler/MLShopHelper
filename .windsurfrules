@@ -1,3 +1,1 @@
 always use tauri 2.x compatible code for this project
--Use await getRecentPriceHistory(itemId) wherever you need to display or operate on the recent price history for an item.
--Use await addPriceHistoryEntryRX(entry) when adding a new price history entry (instead of localStorage or plain arrays).

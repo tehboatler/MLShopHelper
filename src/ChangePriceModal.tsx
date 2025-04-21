@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect, useMemo } from "react";
 import { Modal } from "./Modal";
 import { UISettingsContext } from "./contexts/UISettingsContext";
-import { getPriceHistory, addPriceHistoryEntry } from "./api/priceHistory";
+import { getPriceHistory, addPriceHistoryEntry, syncPriceHistoryToRxdb } from "./api/priceHistory";
 import { getPersistentAnonUserById } from "./api/persistentAnon";
 import type { PriceHistoryEntry } from "./types";
 import {
@@ -20,7 +20,7 @@ interface ChangePriceModalProps {
   onSetPrice: (newPrice: number) => void;
   itemId: string;
   title?: string;
-  itemName?: string;
+  item_name?: string;
   preloadedPriceHistory?: PriceHistoryEntry[];
 }
 
@@ -38,7 +38,13 @@ function formatRelativeDate(dateString: string): string {
   return "just now";
 }
 
-export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, itemId, title, itemName, preloadedPriceHistory }: ChangePriceModalProps) {
+// --- Utility: Appwrite-compliant ID generator ---
+function makeAppwriteId(itemId: string, userId: string) {
+  const safeDate = new Date().toISOString().replace(/[^a-zA-Z0-9]/g, '').slice(0, 14);
+  return `${itemId.slice(0, 12)}-${safeDate}-${userId.slice(0, 8)}`.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 36);
+}
+
+export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, itemId, title, item_name, preloadedPriceHistory }: ChangePriceModalProps) {
   const uiSettings = useContext(UISettingsContext);
   const round50k = uiSettings?.round50k ?? false;
   const showUnsold = uiSettings?.showUnsold ?? false;
@@ -74,92 +80,56 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
 
   useEffect(() => {
     if (!open || !itemId) return;
-    let isMounted = true;
-    // If preloadedPriceHistory is provided, use it immediately
-    if (preloadedPriceHistory && preloadedPriceHistory.length > 0) {
-      setPriceHistory(preloadedPriceHistory);
-    }
-    // 1. Instantly load and display RXDB data (still keep for background update)
-    (async () => {
-      console.log('[ChangePriceModal] Fetching RXDB price history for', itemId, 'at', new Date().toISOString());
-      const rxdbEntries = await import('./priceHistoryRXDB').then(m => m.getRecentPriceHistory(itemId.toString()));
-      if (!isMounted) return;
-      console.log('[ChangePriceModal] RXDB price history result:', rxdbEntries);
-      setPriceHistory(rxdbEntries.map(doc => ({
-        $id: doc.id,
-        itemId: doc.itemId,
-        price: doc.price,
-        date: doc.date,
-        author: doc.author,
-        notes: doc.notes,
-        sold: !!doc.sold,
-        downvotes: doc.downvotes || [],
-      })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    })();
-    // 2. In the background, sync with Appwrite and update if needed
-    (async () => {
-      console.log('[ChangePriceModal] Starting Appwrite sync for', itemId, 'at', new Date().toISOString());
-      const rxdbEntries = await import('./priceHistoryRXDB').then(m => m.getRecentPriceHistory(itemId.toString()));
-      let watermark: string | null = null;
-      if (rxdbEntries.length > 0) {
-        watermark = rxdbEntries[0].date;
+    let isCancelled = false;
+    let sub: any;
+    let replicationState: any;
+    async function setupLiveReplication() {
+      setLoading(true);
+      const db = await import('./rxdb').then(m => m.getDb());
+      // Start/refresh live replication for all price history
+      if (replicationState && replicationState.cancel) {
+        replicationState.cancel();
       }
-      let appwriteEntries = [];
-      if (watermark) {
-        const { Query } = await import('appwrite');
-        const { databases } = await import('./lib/appwrite');
-        const databaseId = import.meta.env.VITE_APPWRITE_DATABASE;
-        const collectionId = import.meta.env.VITE_APPWRITE_PRICE_HISTORY_COLLECTION;
-        const queries = [
-          Query.equal("itemId", itemId.toString()),
-          Query.greaterThan("date", watermark),
-          Query.limit(1000)
-        ];
-        const res = await databases.listDocuments(databaseId, collectionId, queries);
-        appwriteEntries = res.documents;
-        console.log('[ChangePriceModal] Appwrite fetched (watermark mode):', appwriteEntries);
-      } else {
-        const { documents } = await import('./api/priceHistory').then(m => m.getPriceHistory(itemId.toString()));
-        appwriteEntries = documents;
-        console.log('[ChangePriceModal] Appwrite fetched (full fetch):', appwriteEntries);
+      replicationState = await import('./rxdb').then(m => m.replicatePriceHistorySandbox(db));
+      // --- Replication event logging for debugging ---
+      if (replicationState) {
+        replicationState.error$?.subscribe((err: any) => console.error('Replication error:', err));
+        replicationState.active$?.subscribe((active: boolean) => console.log('Replication active:', active));
+        replicationState.received$?.subscribe((doc: any) => console.log('Replication received doc:', doc));
       }
-      const rxdbIds = new Set(rxdbEntries.map(e => e.id));
-      let inserted = false;
-      const { addPriceHistoryEntryRX } = await import('./priceHistoryRXDB');
-      for (const entry of appwriteEntries) {
-        if (!rxdbIds.has(entry.$id)) {
-          console.log('[ChangePriceModal] Inserting new Appwrite entry into RXDB:', entry);
-          await addPriceHistoryEntryRX({
-            id: entry.$id || `${entry.itemId}-${entry.date}-${entry.author}`,
-            itemId: entry.itemId,
-            price: entry.price,
-            date: entry.date,
-            author: entry.author,
-            sold: !!entry.sold,
-            notes: entry.notes ?? '',
-          });
-          inserted = true;
+      // Subscribe to RXDB query for this item
+      const query = db.priceHistory.find({
+        selector: {
+          itemId: itemId.toString(),
+          date: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
+        },
+        sort: [{ date: 'desc' }],
+      });
+      sub = query.$.subscribe((docs: any[]) => {
+        if (!isCancelled) {
+          setPriceHistory(docs.map((doc: any) => ({
+            $id: doc.$id,
+            itemId: doc.itemId,
+            price: doc.price,
+            date: doc.date,
+            author: doc.author,
+            author_ign: doc.author_ign !== undefined ? doc.author_ign : doc.author,
+            notes: doc.notes,
+            sold: !!doc.sold,
+            downvotes: doc.downvotes || [],
+            item_name: doc.item_name || undefined,
+          })));
         }
-      }
-      if (inserted && isMounted) {
-        const entries = await import('./priceHistoryRXDB').then(m => m.getRecentPriceHistory(itemId.toString()));
-        console.log('[ChangePriceModal] RXDB updated after Appwrite sync:', entries);
-        setPriceHistory(entries.map(doc => ({
-          $id: doc.id,
-          itemId: doc.itemId,
-          price: doc.price,
-          date: doc.date,
-          author: doc.author,
-          notes: doc.notes,
-          sold: !!doc.sold,
-          downvotes: doc.downvotes || [],
-        })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-      } else {
-        console.log('[ChangePriceModal] No new entries from Appwrite sync for', itemId);
-      }
-    })();
-    return () => { isMounted = false; };
-  }, [open, itemId, preloadedPriceHistory]);
+      });
+      setLoading(false);
+    }
+    setupLiveReplication();
+    return () => {
+      isCancelled = true;
+      if (sub) sub.unsubscribe();
+      if (replicationState && replicationState.cancel) replicationState.cancel();
+    };
+  }, [open, itemId]);
 
   function computeNewPrice() {
     const manualVal = parseFloat(customPrice);
@@ -253,7 +223,7 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
   );
 
   const sortedRows = useMemo(
-    () => [...filteredRows].sort((a, b) => {
+    () => [...filteredRows].sort((a: PriceHistoryEntry, b: PriceHistoryEntry) => {
       if (sortBy === 'date') {
         const da = new Date(a.date).getTime();
         const db = new Date(b.date).getTime();
@@ -311,41 +281,17 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
       round50k
     });
     if (hasManual) {
-      newPrice = Math.round(manualVal);
+      newPrice = manualVal;
     } else if (hasPercent) {
       newPrice = Math.round(currentPrice * (1 + percentVal / 100));
-    }
-    if (round50k && (hasManual || hasPercent)) {
-      newPrice = Math.round(newPrice / 50000) * 50000;
-    }
-    console.log('[ChangePriceModal] Computed newPrice:', newPrice);
-    if (!hasManual && !hasPercent) {
-      setError("Enter a price or percent change.");
-      console.warn('[ChangePriceModal] No valid price or percent entered.');
-      return;
+      if (round50k) {
+        newPrice = Math.round(newPrice / 50000) * 50000;
+      }
     }
     setLoading(true);
+    setError("");
     try {
-      // Use user_id for author, fetch author_ign from persistent anon user doc
-      const userId = localStorage.getItem('persistentUserId') || '';
-      let ign = '';
-      if (userId) {
-        const userDoc = await getPersistentAnonUserById(userId);
-        ign = userDoc?.user_ign || '';
-        console.log('[ChangePriceModal] Retrieved userDoc:', userDoc);
-      } else {
-        console.warn('[ChangePriceModal] No persistentUserId found in localStorage.');
-      }
-      const priceHistoryPayload = {
-        itemId: itemId.toString(),
-        price: newPrice,
-        date: new Date().toISOString(),
-        author: userId,
-        author_ign: ign,
-        notes: undefined // or set as needed
-      };
-      console.log('[ChangePriceModal] Submitting price history entry:', priceHistoryPayload);
-      await addPriceHistoryEntry(priceHistoryPayload);
+      // Only call the parent onSetPrice handler, do NOT add to DB here
       onSetPrice(newPrice);
       setCustomPrice("");
       setPercent(0);

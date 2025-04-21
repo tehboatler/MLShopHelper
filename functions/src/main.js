@@ -1,4 +1,4 @@
-import { Client, Databases } from 'node-appwrite';
+import { Client, Databases, Query } from 'node-appwrite';
 
 // This Appwrite function will be executed every time your function is triggered
 export default async ({ req, res, log, error }) => {
@@ -21,8 +21,8 @@ export default async ({ req, res, log, error }) => {
     do {
       const result = await databases.listDocuments(DB_ID, collectionId, [
         ...(query || []),
-        ...(cursor ? [Databases.Query.cursorAfter(cursor)] : []),
-        Databases.Query.limit(100),
+        ...(cursor ? [Query.cursorAfter(cursor)] : []),
+        Query.limit(100),
       ]);
       docs = docs.concat(result.documents);
       cursor = result.documents.length ? result.documents[result.documents.length - 1].$id : undefined;
@@ -36,7 +36,7 @@ export default async ({ req, res, log, error }) => {
     let updated = 0;
     for (const item of items) {
       // 2. Get all price history for this item
-      const priceDocs = await getAllDocuments(PRICE_HISTORY_COLLECTION_ID, [Databases.Query.equal('itemId', item.$id)]);
+      const priceDocs = await getAllDocuments(PRICE_HISTORY_COLLECTION_ID, [Query.equal('itemId', item.$id)]);
       const prices = priceDocs.map(doc => doc.price).filter(p => typeof p === 'number');
       if (prices.length === 0) continue;
       prices.sort((a, b) => a - b);

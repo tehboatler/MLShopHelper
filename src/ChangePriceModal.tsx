@@ -20,7 +20,8 @@ interface ChangePriceModalProps {
   onSetPrice: (newPrice: number) => void;
   itemId: string;
   title?: string;
-  itemName?: string; // Add itemName as a prop
+  itemName?: string;
+  preloadedPriceHistory?: PriceHistoryEntry[];
 }
 
 function formatRelativeDate(dateString: string): string {
@@ -37,7 +38,7 @@ function formatRelativeDate(dateString: string): string {
   return "just now";
 }
 
-export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, itemId, title, itemName }: ChangePriceModalProps) {
+export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, itemId, title, itemName, preloadedPriceHistory }: ChangePriceModalProps) {
   const uiSettings = useContext(UISettingsContext);
   const round50k = uiSettings?.round50k ?? false;
   const showUnsold = uiSettings?.showUnsold ?? false;
@@ -47,7 +48,7 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
   const [customPrice, setCustomPrice] = useState("");
   const [percent, setPercent] = useState(0);
   const [error, setError] = useState("");
-  const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>(preloadedPriceHistory || []);
   const [sortBy, setSortBy] = useState<'date'|'price'>('date');
   const [sortDir, setSortDir] = useState<'desc'|'asc'>('desc');
   const [selectedHistoryIdx, setSelectedHistoryIdx] = useState<number|null>(null);
@@ -73,23 +74,92 @@ export function ChangePriceModal({ open, onClose, currentPrice, onSetPrice, item
 
   useEffect(() => {
     if (!open || !itemId) return;
+    let isMounted = true;
+    // If preloadedPriceHistory is provided, use it immediately
+    if (preloadedPriceHistory && preloadedPriceHistory.length > 0) {
+      setPriceHistory(preloadedPriceHistory);
+    }
+    // 1. Instantly load and display RXDB data (still keep for background update)
     (async () => {
-      const res = await getPriceHistory(itemId.toString());
-      // Map to match PriceHistoryEntry interface from PriceHistoryModal
-      const entries = (res.documents || []).map(doc => ({
-        $id: doc.$id,
-        itemId: doc.itemId, // Use itemId for PriceHistoryEntry
+      console.log('[ChangePriceModal] Fetching RXDB price history for', itemId, 'at', new Date().toISOString());
+      const rxdbEntries = await import('./priceHistoryRXDB').then(m => m.getRecentPriceHistory(itemId.toString()));
+      if (!isMounted) return;
+      console.log('[ChangePriceModal] RXDB price history result:', rxdbEntries);
+      setPriceHistory(rxdbEntries.map(doc => ({
+        $id: doc.id,
+        itemId: doc.itemId,
         price: doc.price,
         date: doc.date,
         author: doc.author,
-        author_ign: doc.author_ign,
         notes: doc.notes,
         sold: !!doc.sold,
-        downvotes: doc.downvotes ?? [],
-      }));
-      setPriceHistory(entries);
+        downvotes: doc.downvotes || [],
+      })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     })();
-  }, [open, itemId]);
+    // 2. In the background, sync with Appwrite and update if needed
+    (async () => {
+      console.log('[ChangePriceModal] Starting Appwrite sync for', itemId, 'at', new Date().toISOString());
+      const rxdbEntries = await import('./priceHistoryRXDB').then(m => m.getRecentPriceHistory(itemId.toString()));
+      let watermark: string | null = null;
+      if (rxdbEntries.length > 0) {
+        watermark = rxdbEntries[0].date;
+      }
+      let appwriteEntries = [];
+      if (watermark) {
+        const { Query } = await import('appwrite');
+        const { databases } = await import('./lib/appwrite');
+        const databaseId = import.meta.env.VITE_APPWRITE_DATABASE;
+        const collectionId = import.meta.env.VITE_APPWRITE_PRICE_HISTORY_COLLECTION;
+        const queries = [
+          Query.equal("itemId", itemId.toString()),
+          Query.greaterThan("date", watermark),
+          Query.limit(1000)
+        ];
+        const res = await databases.listDocuments(databaseId, collectionId, queries);
+        appwriteEntries = res.documents;
+        console.log('[ChangePriceModal] Appwrite fetched (watermark mode):', appwriteEntries);
+      } else {
+        const { documents } = await import('./api/priceHistory').then(m => m.getPriceHistory(itemId.toString()));
+        appwriteEntries = documents;
+        console.log('[ChangePriceModal] Appwrite fetched (full fetch):', appwriteEntries);
+      }
+      const rxdbIds = new Set(rxdbEntries.map(e => e.id));
+      let inserted = false;
+      const { addPriceHistoryEntryRX } = await import('./priceHistoryRXDB');
+      for (const entry of appwriteEntries) {
+        if (!rxdbIds.has(entry.$id)) {
+          console.log('[ChangePriceModal] Inserting new Appwrite entry into RXDB:', entry);
+          await addPriceHistoryEntryRX({
+            id: entry.$id || `${entry.itemId}-${entry.date}-${entry.author}`,
+            itemId: entry.itemId,
+            price: entry.price,
+            date: entry.date,
+            author: entry.author,
+            sold: !!entry.sold,
+            notes: entry.notes ?? '',
+          });
+          inserted = true;
+        }
+      }
+      if (inserted && isMounted) {
+        const entries = await import('./priceHistoryRXDB').then(m => m.getRecentPriceHistory(itemId.toString()));
+        console.log('[ChangePriceModal] RXDB updated after Appwrite sync:', entries);
+        setPriceHistory(entries.map(doc => ({
+          $id: doc.id,
+          itemId: doc.itemId,
+          price: doc.price,
+          date: doc.date,
+          author: doc.author,
+          notes: doc.notes,
+          sold: !!doc.sold,
+          downvotes: doc.downvotes || [],
+        })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      } else {
+        console.log('[ChangePriceModal] No new entries from Appwrite sync for', itemId);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [open, itemId, preloadedPriceHistory]);
 
   function computeNewPrice() {
     const manualVal = parseFloat(customPrice);

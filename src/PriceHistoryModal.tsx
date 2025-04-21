@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Modal } from "./Modal";
 import { ChangePriceModal } from "./ChangePriceModal";
-import { getPriceHistory } from "./api/priceHistory";
+import { getRecentPriceHistory, addPriceHistoryEntryRX } from './priceHistoryRXDB';
 import { getIGNForUserId } from "./api/anonLinks";
 import { getPersistentAnonUsersInfoBatch } from "./api/persistentAnon";
 import { updateUserKarma } from "./api/persistentAnon";
@@ -74,25 +74,86 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
 
   useEffect(() => {
     if (open && itemId) {
-      const fetchData = async () => {
-        const res = await getPriceHistory(itemId.toString());
-        const entries = (res.documents || []).map(doc => ({
-          $id: doc.$id,
+      let isMounted = true;
+      // 1. Instantly load and display RXDB data
+      (async () => {
+        const rxdbEntries = await getRecentPriceHistory(itemId.toString());
+        if (!isMounted) return;
+        setPriceHistory(rxdbEntries.map(doc => ({
+          $id: doc.id,
           itemId: doc.itemId,
           price: doc.price,
           date: doc.date,
-          author: doc.author, // always persistent user id
+          author: doc.author,
           sold: !!doc.sold,
           notes: doc.notes,
-          downvotes: Array.isArray(doc.downvotes) ? doc.downvotes : [],
-        }));
-        setPriceHistory(entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-        const uniqueAuthors = Array.from(new Set(entries.map(e => e.author)));
+          downvotes: doc.downvotes || [],
+        })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        const uniqueAuthors = Array.from(new Set(rxdbEntries.map(e => e.author)));
         const userInfo = await batchFetchUserInfo(uniqueAuthors);
+        if (!isMounted) return;
         setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
         setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
-      };
-      fetchData();
+      })();
+      // 2. In the background, sync with Appwrite and update if needed
+      (async () => {
+        const rxdbEntries = await getRecentPriceHistory(itemId.toString());
+        let watermark: string | null = null;
+        if (rxdbEntries.length > 0) {
+          watermark = rxdbEntries[0].date;
+        }
+        let appwriteEntries = [];
+        if (watermark) {
+          const { Query } = await import('appwrite');
+          const { databases } = await import('./lib/appwrite');
+          const databaseId = import.meta.env.VITE_APPWRITE_DATABASE;
+          const collectionId = import.meta.env.VITE_APPWRITE_PRICE_HISTORY_COLLECTION;
+          const queries = [
+            Query.equal("itemId", itemId.toString()),
+            Query.greaterThan("date", watermark),
+            Query.limit(1000)
+          ];
+          const res = await databases.listDocuments(databaseId, collectionId, queries);
+          appwriteEntries = res.documents;
+        } else {
+          const { documents } = await import('./api/priceHistory').then(m => m.getPriceHistory(itemId.toString()));
+          appwriteEntries = documents;
+        }
+        const rxdbIds = new Set(rxdbEntries.map(e => e.id));
+        let inserted = false;
+        for (const entry of appwriteEntries) {
+          if (!rxdbIds.has(entry.$id)) {
+            await addPriceHistoryEntryRX({
+              id: entry.$id || `${entry.itemId}-${entry.date}-${entry.author}`,
+              itemId: entry.itemId,
+              price: entry.price,
+              date: entry.date,
+              author: entry.author,
+              sold: !!entry.sold,
+              notes: entry.notes ?? '',
+            });
+            inserted = true;
+          }
+        }
+        if (inserted && isMounted) {
+          const entries = await getRecentPriceHistory(itemId.toString());
+          setPriceHistory(entries.map(doc => ({
+            $id: doc.id,
+            itemId: doc.itemId,
+            price: doc.price,
+            date: doc.date,
+            author: doc.author,
+            sold: !!doc.sold,
+            notes: doc.notes,
+            downvotes: doc.downvotes || [],
+          })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+          const uniqueAuthors = Array.from(new Set(entries.map(e => e.author)));
+          const userInfo = await batchFetchUserInfo(uniqueAuthors);
+          setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
+          setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
+        }
+      })();
+      return () => { isMounted = false; };
     }
   }, [open, itemId]);
 
@@ -389,38 +450,44 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
                 </table>
               </div>
             </div>
-            <button onClick={async () => {
+            <button onClick={() => {
+              setChangeModalOpen(true); // open modal instantly
               if (currentUserId) {
-                const ign = await getIGNForUserId(currentUserId);
-                setCurrentUserIGN(ign || "");
+                getIGNForUserId(currentUserId).then(ign => setCurrentUserIGN(ign || ""));
               }
-              setChangeModalOpen(true);
             }} style={{marginTop:16}}>Change Current Sale Price</button>
             <ChangePriceModal
               open={changeModalOpen}
               onClose={() => setChangeModalOpen(false)}
               currentPrice={currentPrice}
-              onSetPrice={newPrice => {
-                // Refresh price history after price change
-                if (typeof itemId !== 'undefined' && itemId) {
-                  (async () => {
-                    const res = await getPriceHistory(itemId.toString());
-                    const entries = (res.documents || []).map(doc => ({
-                      $id: doc.$id,
-                      itemId: doc.itemId,
-                      price: doc.price,
-                      date: doc.date,
-                      author: doc.author, // always persistent user id
-                      sold: !!doc.sold,
-                      notes: doc.notes,
-                      downvotes: Array.isArray(doc.downvotes) ? doc.downvotes : [],
-                    }));
-                    setPriceHistory(entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-                    const uniqueAuthors = Array.from(new Set(entries.map(e => e.author)));
-                    const userInfo = await batchFetchUserInfo(uniqueAuthors);
-                    setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
-                    setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
-                  })();
+              onSetPrice={async newPrice => {
+                // Add new price history entry to RXDB
+                if (typeof itemId !== 'undefined' && itemId && currentUserId) {
+                  await addPriceHistoryEntryRX({
+                    id: `${itemId}-${Date.now()}`,
+                    itemId,
+                    price: newPrice,
+                    date: new Date().toISOString(),
+                    author: currentUserId,
+                    sold: false,
+                    notes: '',
+                  });
+                  // Refresh price history from RXDB
+                  const entries = await getRecentPriceHistory(itemId.toString());
+                  setPriceHistory(entries.map(doc => ({
+                    $id: doc.id,
+                    itemId: doc.itemId,
+                    price: doc.price,
+                    date: doc.date,
+                    author: doc.author,
+                    sold: !!doc.sold,
+                    notes: doc.notes,
+                    downvotes: doc.downvotes || [],
+                  })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())); // Most recent first
+                  const uniqueAuthors = Array.from(new Set(entries.map(e => e.author)));
+                  const userInfo = await batchFetchUserInfo(uniqueAuthors);
+                  setAuthorIGNMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.ign || ''])));
+                  setAuthorKarmaMap(Object.fromEntries(uniqueAuthors.map(id => [id, userInfo[id]?.karma ?? 0])));
                 }
                 if (typeof onSetPrice === 'function') onSetPrice(newPrice);
                 setChangeModalOpen(false);

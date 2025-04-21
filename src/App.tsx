@@ -44,6 +44,7 @@ import {
   handlePriceHistory as makeHandlePriceHistory,
   handleRecordSale as makeHandleRecordSale
 } from './handlers/inventoryHandlers';
+import { getDb } from './rxdb';
 
 export default function App() {
   // --- All hooks and state declarations ---
@@ -561,60 +562,6 @@ export default function App() {
     await setIGNForUserId(persistentUserId, modalState.ignInput);
     setIGN(modalState.ignInput);
     dispatchModal({ type: 'CLOSE' });
-  }
-
-  function handleFullDeleteInventoryItem() {
-    if (!inventoryContextMenu.itemId) return;
-    const itemId = inventoryContextMenu.itemId;
-    // Remove from localStorage only (localItems)
-    const localKey = 'localItems';
-    let localItems: Item[] = [];
-    try {
-      localItems = JSON.parse(localStorage.getItem(localKey) || '[]');
-    } catch {}
-    // Remove the item by id from localItems in storage
-    localItems = localItems.filter((i: any) => i.$id !== itemId);
-    localStorage.setItem(localKey, JSON.stringify(localItems));
-    // Remove the item from items state (do not replace with only localItems)
-    setItems(prev => prev.filter(i => i.$id !== itemId));
-    console.log('[Delete] setItems: filtered', itemId);
-    let itemName = '';
-    if (selectedCharacter) {
-      const newOrder = selectedCharacter.shop.order.filter((id: string) => id !== itemId);
-      const newItemCounts = { ...selectedCharacter.shop.itemCounts };
-      delete newItemCounts[itemId];
-      setSelectedCharacter({
-        ...selectedCharacter,
-        shop: {
-          ...selectedCharacter.shop,
-          order: newOrder,
-          itemCounts: newItemCounts
-        }
-      });
-      console.log('[Delete] setSelectedCharacter:', selectedCharacter);
-      const allChars = characters.map(c => c.id === selectedCharacter.id ? selectedCharacter : c)
-        .filter((c): c is Character => c !== null && c !== undefined);
-      setCharacters(allChars);
-      console.log('[Delete] setCharacters:', allChars);
-      localStorage.setItem('characters', JSON.stringify(allChars));
-      localStorage.setItem('selectedCharacter', JSON.stringify(selectedCharacter));
-    }
-    // Get the name of the removed item for the toast
-    const removedItem = items.find(i => i.$id === itemId);
-    if (removedItem) itemName = removedItem.name;
-    // Update filteredItems by removing the deleted item
-    // setFilteredItems(prev => prev.filter(i => i.$id !== itemId));
-    console.log('[Delete] setFilteredItems: filtered', itemId);
-    showToast(itemName ? `[${itemName}] removed from store` : `Item removed from store`);
-    console.log('[Delete] setToast: show');
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast({ msg: '', visible: false });
-      console.log('[Delete] setToast: hide');
-    }, 1700);
-    setContextMenu({ x: 0, y: 0, item: null });
-    setInventoryContextMenu({ open: false, x: 0, y: 0, itemId: undefined });
-    console.log('[Delete] setContextMenu: close');
   }
 
   // Filtering and sorting logic

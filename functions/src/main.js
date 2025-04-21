@@ -9,10 +9,22 @@ export default async ({ req, res, log, error }) => {
   const databases = new Databases(client);
 
   // ENV VARS: Set these in your Appwrite Function settings
-  const DB_ID = process.env.DB_ID;
-  const ITEMS_COLLECTION_ID = process.env.ITEMS_COLLECTION_ID;
-  const PRICE_HISTORY_COLLECTION_ID = process.env.PRICE_HISTORY_COLLECTION_ID;
-  const STATS_COLLECTION_ID = process.env.STATS_COLLECTION_ID;
+  const DB_ID = process.env.VITE_APPWRITE_DATABASE;
+  const ITEMS_COLLECTION_ID = process.env.VITE_APPWRITE_ITEMS_COLLECTION;
+  const PRICE_HISTORY_COLLECTION_ID = process.env.VITE_APPWRITE_PRICE_HISTORY_COLLECTION;
+  const STATS_COLLECTION_ID = process.env.VITE_APPWRITE_STATS_COLLECTION;
+
+  // Runtime check for missing env vars
+  if (!DB_ID || !ITEMS_COLLECTION_ID || !PRICE_HISTORY_COLLECTION_ID || !STATS_COLLECTION_ID) {
+    const missing = [
+      !DB_ID && 'VITE_APPWRITE_DATABASE',
+      !ITEMS_COLLECTION_ID && 'VITE_APPWRITE_ITEMS_COLLECTION',
+      !PRICE_HISTORY_COLLECTION_ID && 'VITE_APPWRITE_PRICE_HISTORY_COLLECTION',
+      !STATS_COLLECTION_ID && 'VITE_APPWRITE_STATS_COLLECTION',
+    ].filter(Boolean).join(', ');
+    error(`[main] Fatal error: Missing required environment variables: ${missing}`);
+    throw new Error(`[main] Fatal error: Missing required environment variables: ${missing}`);
+  }
 
   // Helper: fetch all documents from a collection (paginated)
   async function getAllDocuments(collectionId, query) {

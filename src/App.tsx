@@ -138,7 +138,11 @@ export default function App() {
     const val = localStorage.getItem("showUnsold");
     return val ? val === "true" : false;
   });
-  const [compactMode, setCompactMode] = useState(false);
+  const [compactMode, setCompactMode] = useState(() => {
+    const val = localStorage.getItem("compactMode");
+    if (val !== null) return val === "true";
+    return true; // Default to compact mode
+  });
   const [sellModalOpen, setSellModalOpen] = useState(false);
   const [sellItem, setSellItem] = useState<Item | null>(null);
   const [priceStats, setPriceStats] = useState<Record<string, { recent?: PriceHistoryEntry }>>({});
@@ -169,6 +173,9 @@ export default function App() {
   const [inventoryContextMenu, setInventoryContextMenu] = useState<{ open: boolean, x: number, y: number, itemId?: string }>({ open: false, x: 0, y: 0 });
 
   const [userPriceMap, setUserPriceMap] = useState<Map<string, PriceHistoryEntry>>(new Map());
+
+  // Tab state for Inventory sidepanel
+  const [inventoryTab, setInventoryTab] = useState<'inventory' | 'ledger'>('inventory');
 
   // Fetch only the latest user price entry for each item for the "Your Price" cell
   async function fetchUserPrices() {
@@ -346,6 +353,11 @@ export default function App() {
     if (!search) return items;
     return fuse.search(search).map(result => result.item);
   }, [search, fuse, items]);
+
+  // Helper for opening the StockDialog
+  function handleOpenStockDialog(itemId: string) {
+    setStockDialog({ open: true, itemId });
+  }
 
   // --- Rest of App logic and rendering ---
   async function fetchItems() {
@@ -596,7 +608,7 @@ export default function App() {
         userKarma={userKarma}
       />
       {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
-      <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 32 }}>
+      <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 16 }}>
         {addCharacterPrompt && (
           <div style={{
             position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -610,26 +622,110 @@ export default function App() {
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', minHeight: 0 }}>
-          {/* Inventory Side Panel */}
-          <InventoryPanel
-            characters={characters}
-            selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
-            setSelectedCharacterId={id => {
-              const found = characters.find(c => c.id === id) || null;
-              setSelectedCharacter(found);
-            }}
-            handleAddCharacter={handleAddCharacter}
-            handleDeleteCharacter={handleDeleteCharacter}
-            handleInventoryDragEnd={handleInventoryDragEnd}
-            itemMap={itemMap}
-            userPriceMap={userPriceMap}
-            setToast={setToast}
-            toastTimeoutRef={toastTimeoutRef}
-            setInventoryContextMenu={setInventoryContextMenu}
-            getLastUserPriceEntry={getLastUserPriceEntry}
-            selectedCharacter={selectedCharacter}
-            handleOpenStockDialog={(itemId) => setStockDialog({ open: true, itemId })}
-          />
+          {/* Inventory Sidepanel with Tabs */}
+          <aside className="inventory-panel-scroll" style={{
+            width: 303,
+            minWidth: 230,
+            maxWidth: 340,
+            background: '#232323',
+            borderRight: '1.5px solid #333',
+            padding: 0,
+            overflow: 'hidden', // revert to hidden to avoid overhang
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0,
+            boxSizing: 'border-box',
+            position: 'relative',
+          }}>
+            {/* Tab Buttons */}
+            <div style={{
+              display: 'flex',
+              borderBottom: '1px solid #333',
+              background: '#232323',
+              width: '100%',
+              boxSizing: 'border-box',
+              margin: 0,
+              padding: 0,
+              position: 'relative',
+              zIndex: 2,
+              overflow: 'hidden', // revert to hidden to avoid overhang
+            }}>
+              <button
+                style={{
+                  flex: 1,
+                  padding: '12px 0 10px 0',
+                  background: inventoryTab === 'inventory' ? '#181818' : 'transparent',
+                  color: inventoryTab === 'inventory' ? '#fff' : '#aaa',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  border: 'none',
+                  borderBottom: inventoryTab === 'inventory' ? '2px solid #2d8cff' : 'none',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'background .15s, color .15s',
+                  width: '100%',
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                  margin: 0,
+                  borderRadius: 0,
+                  overflow: 'hidden', // revert to hidden to avoid overhang
+                }}
+                onClick={() => setInventoryTab('inventory')}
+              >Inventory</button>
+              <button
+                style={{
+                  flex: 1,
+                  padding: '12px 0 10px 0',
+                  background: inventoryTab === 'ledger' ? '#181818' : 'transparent',
+                  color: inventoryTab === 'ledger' ? '#fff' : '#aaa',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  border: 'none',
+                  borderBottom: inventoryTab === 'ledger' ? '2px solid #2d8cff' : 'none',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'background .15s, color .15s',
+                  width: '100%',
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                  margin: 0,
+                  borderRadius: 0,
+                  overflow: 'hidden', // revert to hidden to avoid overhang
+                }}
+                onClick={() => setInventoryTab('ledger')}
+              >Ledger</button>
+            </div>
+            {/* Tab Content */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+              {inventoryTab === 'inventory' && (
+                <InventoryPanel
+                  characters={characters}
+                  selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
+                  setSelectedCharacterId={id => {
+                    const found = characters.find(c => c.id === id) || null;
+                    setSelectedCharacter(found);
+                    localStorage.setItem('selectedCharacter', JSON.stringify(found));
+                  }}
+                  handleAddCharacter={handleAddCharacter}
+                  handleDeleteCharacter={handleDeleteCharacter}
+                  handleInventoryDragEnd={handleInventoryDragEnd}
+                  itemMap={itemMap}
+                  userPriceMap={userPriceMap}
+                  setToast={setToast}
+                  toastTimeoutRef={toastTimeoutRef}
+                  setInventoryContextMenu={setInventoryContextMenu}
+                  getLastUserPriceEntry={getLastUserPriceEntry}
+                  selectedCharacter={selectedCharacter}
+                  handleOpenStockDialog={handleOpenStockDialog}
+                />
+              )}
+              {inventoryTab === 'ledger' && (
+                <div style={{ color: '#aaa', padding: 24, fontSize: 16, textAlign: 'center' }}>
+                  Ledger functionality coming soon.
+                </div>
+              )}
+            </div>
+          </aside>
           {/* Main Content */}
           <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 /* matches inventory panel's right padding */ }}>
             <InventoryTable
@@ -722,7 +818,7 @@ export default function App() {
             {
               label: "Remove from Store",
               icon: <span aria-hidden="true">🗑</span>,
-              onClick: handleFullDeleteInventoryItem
+              onClick: handleDeleteInventoryItem
             },
             {
               label: "Record Sale...",
@@ -788,7 +884,7 @@ export default function App() {
             onAdjustStock={handleAdjustStock}
             onPriceHistory={handlePriceHistory}
             onRecordSale={handleRecordSale}
-            onDelete={handleFullDeleteInventoryItem}
+            onDelete={handleDeleteInventoryItem}
             deleteLabel="Remove from Store"
           />
         )}

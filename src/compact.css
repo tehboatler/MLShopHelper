@@ -61,3 +61,194 @@
   font-size: 0.92rem !important;
   padding: 4px 6px !important;
 }
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.ledger-list-scroll-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: #20232b;
+  border-radius: 6px;
+  min-height: 0;
+}
+
+.ledger-list-scroll-container.no-scrollbar {
+  overflow-y: auto;
+}
+
+.ledger-list-header-row {
+  display: flex;
+  width: 100%;
+  background: #1b1e25;
+  border-bottom: 2px solid #23283a;
+  font-weight: 700;
+  color: #b0b9d6;
+  font-size: 15px;
+  padding: 8px 14px 8px 14px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ledger-list-header-item {
+  flex: 2;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ledger-list-header-price {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  padding-left: 18px;
+}
+
+.ledger-list-header-author {
+  flex: 1.2;
+  min-width: 0;
+  text-align: left;
+  padding-left: 18px;
+}
+
+.ledger-list-header-date {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  padding-left: 18px;
+}
+
+.ledger-list-row.block {
+  margin: 0;
+  border: none;
+  transition: outline 0.15s, background 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #20232b;
+  border-bottom: 1px solid #23283a;
+  min-height: 48px;
+  padding: 14px 14px 10px 14px;
+  border-radius: 0;
+  position: relative;
+}
+
+.ledger-list-row.block:active {
+  filter: brightness(0.98);
+}
+
+.ledger-list-row-block-main {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.ledger-list-row-item-name {
+  display: inline-block;
+  vertical-align: middle;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+}
+
+.ledger-list-row-item-popout {
+  position: absolute;
+  left: 0;
+  top: 110%;
+  z-index: 10010;
+  background: #181f2e;
+  color: #fff;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  white-space: normal;
+  box-shadow: 0 4px 16px 0 #0009;
+  min-width: 220px;
+  max-width: 340px;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.18s;
+  display: block;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.ledger-list-row-item-popout-nowrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 100%;
+  width: max-content;
+  height: 100%;
+  z-index: 10;
+  background: #181f2e;
+  color: #fff;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px 0 #0009;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.ledger-list-row-price {
+  color: #2d8cff;
+  font-weight: 600;
+  font-size: 16px;
+  white-space: nowrap;
+  margin-left: 0;
+}
+
+.ledger-list-row-block-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.ledger-list-row-author {
+  color: #b0b9d6;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ledger-list-row-date {
+  color: #b0b9d6;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: auto;
+  align-self: flex-end;
+}
+
+.ledger-list-row-hovered {
+  background: none !important;
+  outline: none !important;
+}
+
+/* Removed .ledger-list-row-sold as row highlight is now used instead */

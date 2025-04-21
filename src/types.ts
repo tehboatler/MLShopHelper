@@ -1,3 +1,13 @@
+// Appwrite document base type for type safety
+export interface AppwriteBaseDocument {
+  $id: string;
+  $collectionId: string;
+  $databaseId: string;
+  $createdAt: string;
+  $updatedAt: string;
+  $permissions: string[];
+}
+
 export interface Item {
   $id: string; // Appwrite document ID
   name: string;
@@ -41,4 +51,13 @@ export interface InventorySection {
   id: string;
   name: string;
   itemIds: string[];
+}
+
+// PersistentAnonLink now extends AppwriteBaseDocument for type safety
+export interface PersistentAnonLink extends AppwriteBaseDocument {
+  secret: string;
+  userId: string;
+  user_ign?: string;
+  karma: number;
+  whitelist?: string[];  // Array of userIds (string)
 }

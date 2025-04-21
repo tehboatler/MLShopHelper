@@ -1,0 +1,166 @@
+.loginScreenRoot {
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  background: #232526;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+}
+
+.loginCard {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  min-width: 340px;
+  max-width: 420px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto;
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.loginHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2.2rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.logoIcon {
+  width: 38px;
+  height: 38px;
+  display: block;
+}
+
+.loginTitle {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
+
+.loginContentCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 280px;
+  max-width: 380px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.loginButton {
+  width: 100%;
+  padding: 0.85rem 0;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  border: none;
+  border-radius: 9px;
+  background: linear-gradient(90deg, #ffb700 0%, #ff7e5f 100%);
+  color: #232526;
+  font-size: 1.12rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(255,183,0,0.08);
+}
+.loginButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.loginButton:not(:disabled):hover, .loginButton:not(:disabled):focus {
+  background: linear-gradient(90deg, #ff7e5f 0%, #ffb700 100%);
+  box-shadow: 0 4px 16px rgba(255,126,95,0.14);
+}
+
+.inputGroup {
+  width: 100%;
+  margin-bottom: 1.1rem;
+  display: flex;
+  flex-direction: column;
+}
+.inputLabel {
+  color: #e0e0e0;
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+  font-weight: 500;
+}
+.loginInput {
+  padding: 0.7rem 1rem;
+  border-radius: 7px;
+  border: 1px solid #444;
+  background: #232526;
+  color: #fff;
+  font-size: 1rem;
+  transition: border 0.2s;
+}
+.loginInput:focus {
+  border: 1.5px solid #ffb700;
+  outline: none;
+}
+
+.loginSecretPrompt {
+  background: rgba(255, 183, 0, 0.09);
+  border-left: 4px solid #ffb700;
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin: 1.2rem 0 0.5rem 0;
+  color: #fff;
+  width: 100%;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.loginSecretPrompt h4 {
+  margin: 0 0 0.5rem 0;
+  color: #ffb700;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.loginError {
+  background: rgba(255, 65, 54, 0.13);
+  border-left: 4px solid #ff4136;
+  color: #ff4136;
+  border-radius: 8px;
+  padding: 0.85rem 1.2rem;
+  margin-top: 1.2rem;
+  width: 100%;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+hr {
+  width: 100%;
+  border: none;
+  border-top: 1px solid #444;
+  margin: 1.5rem 0;
+  opacity: 0.35;
+}
+
+@media (max-width: 500px) {
+  .loginCard {
+    min-width: unset;
+    padding: 0;
+  }
+  .loginHeader {
+    gap: 0.5rem;
+  }
+  .loginTitle {
+    font-size: 1.4rem;
+  }
+  .logoIcon {
+    width: 28px;
+    height: 28px;
+  }
+}

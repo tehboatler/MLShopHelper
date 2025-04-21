@@ -62,6 +62,26 @@ export const priceHistorySchema = {
   additionalProperties: false, // keep strict
 } as const;
 
+// Item stats schema
+export const itemStatsSchema = {
+  title: 'item stats schema',
+  version: 0,
+  description: 'describes stats for an item',
+  type: 'object',
+  primaryKey: 'itemId',
+  properties: {
+    itemId: { type: 'string', maxLength: 128 },
+    p25: { type: ['number', 'null'] },
+    median: { type: ['number', 'null'] },
+    avg: { type: ['number', 'null'] },
+    p75: { type: ['number', 'null'] },
+    updatedAt: { type: 'string', format: 'date-time' },
+    _deleted: { type: 'boolean', default: false },
+  },
+  required: ['itemId'],
+  additionalProperties: false,
+} as const;
+
 // Database instance singleton
 let dbPromise: Promise<RxDatabase> | null = null;
 
@@ -77,6 +97,7 @@ export async function getDb() {
       await db.addCollections({
         items: { schema: itemSchema },
         priceHistory: { schema: priceHistorySchema },
+        itemStats: { schema: itemStatsSchema }, // <-- add itemStats
       });
 
       // --- Start Appwrite replication for priceHistory ---
@@ -109,4 +130,64 @@ export async function replicatePriceHistorySandbox(db: RxDatabase) {
     live: true,
     retryTime: 5000,
   });
+}
+
+// --- Compute and update itemStats from priceHistory ---
+export async function updateAllItemStats() {
+  const db = await getDb();
+  const priceHistory = await db.priceHistory.find().exec();
+  console.log('[itemStats] priceHistory entries:', priceHistory.length, priceHistory);
+  const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+
+  // Get all current itemStats for quick lookup
+  const currentStatsArr = await db.itemStats.find().exec();
+  console.log('[itemStats] current itemStats before update:', currentStatsArr.length, currentStatsArr);
+  const currentStatsMap = new Map<string, any>(
+    currentStatsArr.map(stat => [stat.itemId, stat])
+  );
+
+  const grouped = priceHistory.reduce((acc: Record<string, number[]>, entry: any) => {
+    if (!acc[entry.itemId]) acc[entry.itemId] = [];
+    acc[entry.itemId].push(entry.price);
+    return acc;
+  }, {} as Record<string, number[]>);
+  console.log('[itemStats] grouped priceHistory by itemId:', grouped);
+
+  for (const [itemId, prices] of Object.entries(grouped)) {
+    if (!Array.isArray(prices) || !prices.length) continue;
+    const existing = currentStatsMap.get(itemId);
+    const lastUpdated = existing?.updatedAt ? existing.updatedAt.slice(0, 10) : null;
+    if (lastUpdated === todayStr) {
+      console.log(`[itemStats] Skipping ${itemId} (already updated today)`);
+      continue; // Already updated today
+    }
+    const sorted = prices.slice().sort((a: number, b: number) => a - b);
+    const avg = sorted.reduce((a: number, b: number) => a + b, 0) / sorted.length;
+    const p25 = percentile(sorted, 0.25);
+    const median = percentile(sorted, 0.5);
+    const p75 = percentile(sorted, 0.75);
+    const upserted = {
+      itemId,
+      p25,
+      median,
+      avg,
+      p75,
+      updatedAt: new Date().toISOString(),
+    };
+    console.log(`[itemStats] Upserting for ${itemId}:`, upserted);
+    await db.itemStats.upsert(upserted);
+  }
+
+  // Log after update
+  const afterStatsArr = await db.itemStats.find().exec();
+  console.log('[itemStats] itemStats after update:', afterStatsArr.length, afterStatsArr);
+}
+
+function percentile(arr: number[], p: number): number | null {
+  if (!arr.length) return null;
+  const idx = (arr.length - 1) * p;
+  const lower = Math.floor(idx);
+  const upper = Math.ceil(idx);
+  if (lower === upper) return arr[lower];
+  return arr[lower] + (arr[upper] - arr[lower]) * (idx - lower);
 }

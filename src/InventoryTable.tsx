@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { Item, PriceHistoryEntry } from "./types";
 import { daysAgo } from "./utils";
 import {
@@ -8,6 +8,7 @@ import {
   flexRender,
   createColumnHelper,
 } from '@tanstack/react-table';
+import { getDb, updateAllItemStats } from './rxdb';
 
 interface InventoryTableProps {
   filteredItems: Item[];
@@ -35,6 +36,8 @@ interface InventoryTableProps {
   setSellItem: (item: Item) => void;
   setSellModalOpen: (open: boolean) => void;
   openHistoryModal: (item: Item) => void;
+  filterByFriends?: boolean;
+  friendsWhitelist?: string[];
 }
 
 const columnHelper = createColumnHelper<Item>();
@@ -59,9 +62,41 @@ export default function InventoryTable({
   setSellItem,
   setSellModalOpen,
   openHistoryModal,
+  filterByFriends,
+  friendsWhitelist
 }: InventoryTableProps) {
   // Fix priceStats typing for indexed access
   const getRecentPrice = (itemId: string) => priceStats[itemId]?.recent;
+
+  // Fetch itemStats from RxDB using direct query (no rxdb-hooks)
+  const [itemStats, setItemStats] = useState<any[]>([]);
+  useEffect(() => {
+    let mounted = true;
+    getDb().then(db =>
+      db.itemStats.find().exec().then(stats => {
+        if (mounted) setItemStats(stats);
+      })
+    );
+    return () => { mounted = false; };
+  }, []);
+
+  // Update itemStats on UI refresh (mount)
+  useEffect(() => {
+    updateAllItemStats().then(() => {
+      // Optionally re-fetch itemStats after update
+      getDb().then(db =>
+        db.itemStats.find().exec().then(stats => {
+          setItemStats(stats);
+        })
+      );
+    });
+  }, []);
+
+  // Memoize stats lookup by itemId
+  const statsMap = useMemo(
+    () => new Map((itemStats ?? []).map(stat => [stat.itemId, stat])),
+    [itemStats]
+  );
 
   // Define columns using TanStack Table
   const columns = useMemo(() => [
@@ -115,8 +150,11 @@ export default function InventoryTable({
         </span>
       ),
       cell: info => {
-        const median = priceStats[info.row.original.$id]?.p50;
-        return median !== undefined ? median.toLocaleString() : <span style={{color:'#888'}}>–</span>;
+        const stats = statsMap.get(info.row.original.$id);
+        const median = stats?.median;
+        return median !== undefined && median !== null
+          ? median.toLocaleString(undefined, { maximumFractionDigits: 0 })
+          : <span style={{color:'#888'}}>–</span>;
       },
       size: 120,
     }),
@@ -249,27 +287,26 @@ export default function InventoryTable({
                         display: 'flex',
                         justifyContent: 'flex-start',
                         alignItems: 'flex-start',
-                        fontSize: '5px',
-                        color: '#333',
-                        padding: '0.5px 8px 0.5px 8px',
+                        fontSize: '11px',
+                        color: '#bbb',
+                        padding: '2px 8px',
                         borderRadius: 0,
                         minHeight: 0,
-                        background: 'inherit',
                       }}
                     >
-                      {statKeys.map((key: StatKey) => (
-                        <div key={key} style={{ flex: 1, textAlign: 'left', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
-                          <span style={{
-                            fontWeight: 500,
-                            color: key === 'avg' ? '#2d8cff' : '#888888',
-                            letterSpacing: 0,
-                            fontSize: '12px',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {key.toUpperCase()}: <span style={{color: '#b0b4bb'}}>{priceStats[row.original.$id]?.[key]?.toLocaleString() ?? '-'}</span>
-                          </span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const stats = statsMap.get(row.original.$id);
+                        const format = (n: number | null | undefined) =>
+                          typeof n === 'number' ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '-';
+                        return (
+                          <>
+                            <span style={{ marginRight: 12 }}>P25: {format(stats?.p25)}</span>
+                            <span style={{ marginRight: 12 }}>Median: {format(stats?.median)}</span>
+                            <span style={{ marginRight: 12 }}>Avg: {format(stats?.avg)}</span>
+                            <span>P75: {format(stats?.p75)}</span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </td>
                 </tr>

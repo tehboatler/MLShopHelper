@@ -24,6 +24,8 @@ interface PriceHistoryModalProps {
   itemId: string;
   itemName: string;
   currentPrice: number;
+  filterByFriends?: boolean;
+  friendsWhitelist?: string[];
   onSetPrice: (newPrice: number) => void;
 }
 
@@ -64,7 +66,7 @@ async function batchFetchUserInfo(userIds: string[]): Promise<Record<string, { i
   return results;
 }
 
-export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPrice, onSetPrice }: PriceHistoryModalProps) {
+export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPrice, filterByFriends, friendsWhitelist, onSetPrice }: PriceHistoryModalProps) {
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([]);
   const [changeModalOpen, setChangeModalOpen] = useState(false);
   const [showUnsold, setShowUnsold] = useState(false);
@@ -106,7 +108,7 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
       sub = query.$.subscribe((docs: any[]) => {
         if (!isCancelled) {
           setPriceHistory(docs.map(doc => ({
-            $id: doc.$id,
+            $id: doc.id || doc.$id,
             itemId: doc.itemId,
             price: doc.price,
             date: doc.date,
@@ -143,10 +145,31 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
     }
   }, [open]);
 
+  // Apply friends filtering to price history entries if enabled
+  const filteredPriceHistory = useMemo(() => {
+    if (filterByFriends && friendsWhitelist) {
+      return priceHistory.filter(entry => friendsWhitelist.includes(entry.author));
+    }
+    return priceHistory;
+  }, [filterByFriends, friendsWhitelist, priceHistory]);
+
+  // Debug output for filtering - remove in production
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[PriceHistoryModal DEBUG]', {
+        currentUserId,
+        friendsWhitelist,
+        allAuthors: priceHistory.map(e => e.author),
+        filteredAuthors: filteredPriceHistory.map(e => e.author),
+        filterByFriends
+      });
+    }
+  }, [currentUserId, friendsWhitelist, priceHistory, filteredPriceHistory, filterByFriends]);
+
   // Memoize filteredHistory to avoid unnecessary recalculations and render loops
   const filteredHistory = useMemo(() => (
-    showUnsold ? priceHistory : priceHistory.filter(e => e.sold)
-  ), [showUnsold, priceHistory]);
+    showUnsold ? filteredPriceHistory : filteredPriceHistory.filter(e => e.sold)
+  ), [showUnsold, filteredPriceHistory]);
 
   // Memoize downvotedIds to avoid unnecessary recalculations
   const downvotedIds = useMemo(() => {
@@ -238,6 +261,39 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
         );
       },
     }),
+    columnHelper.display({
+      id: 'actions',
+      header: () => <span style={{ textAlign: 'center', display: 'block', width: '100%' }}>Actions</span>,
+      cell: info => {
+        const entry = info.row.original;
+        if (!currentUserId || entry.author !== currentUserId) return null;
+        return (
+          <button
+            className="table-action"
+            style={{ color: '#e74c3c', fontWeight: 700, fontSize: 16, background: 'none', border: 'none', cursor: 'pointer' }}
+            title="Delete this entry"
+            onClick={async (e) => {
+              e.preventDefault();
+              if (window.confirm('Delete this price history entry? This cannot be undone.')) {
+                // Optimistically update UI
+                setPriceHistory(ph => ph.filter(p => p.$id !== entry.$id));
+                // Delete from RXDB
+                try {
+                  const { deletePriceHistoryEntryRX } = await import('./priceHistoryRXDB');
+                  await deletePriceHistoryEntryRX(entry.$id);
+                } catch (err) {
+                  if (err && typeof err === 'object' && 'message' in err) {
+                    alert('Failed to delete entry: ' + (err as any).message);
+                  } else {
+                    alert('Failed to delete entry: ' + String(err));
+                  }
+                }
+              }
+            }}
+          >🗑</button>
+        );
+      }
+    })
   ], [authorIGNMap, authorKarmaMap, downvotedIds, downvoteLoading, currentUserId, columnHelper]);
 
   // Do NOT wrap useReactTable in useMemo! This is a hook and must be called at the top level.
@@ -325,7 +381,7 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
             <div style={{marginBottom:12, display:'flex', alignItems:'center', gap:16}}>
               <b>Current Price:</b> <span>{currentPrice.toLocaleString()}</span>
             </div>
-            {priceHistory.length > 0 ? (
+            {filteredPriceHistory.length > 0 ? (
               <div style={{ flex: '0 0 320px', minHeight: 320, width: '100%' }}>
                 {/* --- Plotly Boxplot (responsive, dark mode) --- */}
                 <Plot
@@ -385,7 +441,7 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
                 No sales history to display.
               </div>
             )}
-            {priceHistory.length > 0 && paddedBoxplotData.length === 1 && (
+            {filteredPriceHistory.length > 0 && paddedBoxplotData.length === 1 && (
               <div style={{ color: '#888', textAlign: 'center', marginBottom: 8 }}>
                 Only one day of price data. Add more sales to see trends over time.
               </div>

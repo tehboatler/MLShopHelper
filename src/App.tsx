@@ -240,24 +240,27 @@ export default function App() {
     ensureAnonymousSession();
   }, []);
 
-  useEffect(() => {
-    async function checkAuth() {
-      const persistentSecret = localStorage.getItem('persistentSecret');
-      const persistentUserId = localStorage.getItem('persistentUserId');
-      try {
-        const user = await getCurrentUser();
-        if (user && persistentSecret && persistentUserId) {
-          setLoggedIn(true);
-          setUserId(user.$id);
-        } else {
-          setLoggedIn(false);
-          setUserId(null);
-        }
-      } catch (e) {
+  // Move checkAuth outside useEffect so it can be called after login
+  async function checkAuth() {
+    const persistentSecret = localStorage.getItem('persistentSecret');
+    const persistentUserId = localStorage.getItem('persistentUserId');
+    try {
+      const user = await getCurrentUser();
+      if (user && persistentSecret && persistentUserId) {
+        setLoggedIn(true);
+        setUserId(user.$id);
+      } else {
         setLoggedIn(false);
         setUserId(null);
       }
+    } catch (e) {
+      setLoggedIn(false);
+      setUserId(null);
     }
+  }
+
+  // Call checkAuth on mount
+  useEffect(() => {
     checkAuth();
   }, []);
 
@@ -365,6 +368,30 @@ export default function App() {
     if (loggedIn === false) {
       import('./api/auth').then(({ logout }) => logout());
     }
+  }, [loggedIn]);
+
+  // --- Friends Filtering State ---
+  const [filterByFriends, setFilterByFriends] = useState(false);
+  const [friendsWhitelist, setFriendsWhitelist] = useState<string[]>([]);
+
+  // Fetch the user's whitelist (friends) and include self
+  useEffect(() => {
+    async function fetchFriends() {
+      const persistentUserId = localStorage.getItem('persistentUserId');
+      if (!persistentUserId) return;
+      try {
+        const { getAnonLinkDocByUserId } = await import('./api/anonLinks');
+        const doc = await getAnonLinkDocByUserId(persistentUserId);
+        let whitelist = Array.isArray(doc?.whitelist) ? doc.whitelist : [];
+        if (!whitelist.includes(persistentUserId)) {
+          whitelist = [persistentUserId, ...whitelist];
+        }
+        setFriendsWhitelist(whitelist);
+      } catch (err) {
+        setFriendsWhitelist([persistentUserId]);
+      }
+    }
+    if (loggedIn === true) fetchFriends();
   }, [loggedIn]);
 
   // --- Memoized Fuse instance and filteredItems ---
@@ -641,7 +668,7 @@ export default function App() {
     return null;
   }
   if (loggedIn === false) {
-    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+    return <LoginScreen onLogin={checkAuth} />;
   }
 
   return (
@@ -654,6 +681,8 @@ export default function App() {
         compactMode={compactMode}
         setCompactMode={setCompactMode}
         userKarma={userKarma}
+        filterByFriends={filterByFriends}
+        setFilterByFriends={setFilterByFriends}
       />
       {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
       <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 0 }}>
@@ -794,6 +823,8 @@ export default function App() {
               setSellItem={setSellItem}
               setSellModalOpen={setSellModalOpen}
               openHistoryModal={item => setPriceHistoryModal({ open: true, itemId: item.$id })}
+              filterByFriends={filterByFriends}
+              friendsWhitelist={friendsWhitelist}
             />
           </div>
         </div>
@@ -883,6 +914,8 @@ export default function App() {
             itemId={priceHistoryModal.itemId ?? ''}
             itemName={itemMap[priceHistoryModal.itemId]?.name || ''}
             currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.current_selling_price ?? 0}
+            filterByFriends={filterByFriends}
+            friendsWhitelist={friendsWhitelist}
             onSetPrice={async (newPrice) => {
               if (priceHistoryModal.itemId) {
                 await handleChangePrice(

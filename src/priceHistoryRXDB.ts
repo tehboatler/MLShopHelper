@@ -81,3 +81,14 @@ export async function addPriceHistoryEntryRX(entry: any) {
     await doc.remove();
   }
 }
+
+export async function deletePriceHistoryEntryRX(entryId: string) {
+  if (!entryId) throw new Error('deletePriceHistoryEntryRX: entryId is required');
+  const db = await getDb();
+  const doc = await db.priceHistory.findOne({ selector: { id: entryId } }).exec();
+  if (doc) {
+    await doc.remove();
+    return true;
+  }
+  return false;
+}

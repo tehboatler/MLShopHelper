@@ -17,6 +17,7 @@ MLShopHelper is a collaborative, crowdsourced price tracker and inventory datash
 - **Hotkeys:** Searching, Adding Items to Store and Selling Items without touching the mouse (e.g., Ctrl+R, Escape).
 
 ![MLShopHelper in action](public/MLShopHelper.gif)
+![Shop Restocking Showcase](public/MLShopHelperShopStockShowcase.gif)
 
 ## Getting Started
 

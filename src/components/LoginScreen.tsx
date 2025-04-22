@@ -86,127 +86,92 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
   };
 
-  // function DebugSessionInfo() {
-  //   const [user, setUser] = useState<any>(null);
-  //   const [sessionType, setSessionType] = useState<string>("");
-  //   const [error, setError] = useState<string>("");
-
-  //   async function refresh() {
-  //     setError("");
-  //     try {
-  //       const u = await getCurrentUser();
-  //       setUser(u);
-  //       if (!u) {
-  //         setSessionType("NO SESSION");
-  //       } else if (u.email && u.email.endsWith('@mlshophelper.local')) {
-  //         setSessionType("PERSISTENT ANON USER");
-  //       } else {
-  //         setSessionType("REGISTERED USER");
-  //       }
-  //     } catch (e: any) {
-  //       setError(e.message || "Unknown error");
-  //       setUser(null);
-  //       setSessionType("");
-  //     }
-  //   }
-
-  //   async function handleLogout() {
-  //     setError("");
-  //     try {
-  //       await logout();
-  //       await refresh();
-  //     } catch (e: any) {
-  //       setError(e.message || "Logout error");
-  //     }
-  //   }
-
-  //   return (
-  //     <div style={{ margin: '14px 0', padding: 8, background: '#222', borderRadius: 8, color: '#ccc', fontSize: 13 }}>
-  //       <b>Debug Session Info</b>
-  //       <div>Session Type: <code>{sessionType}</code></div>
-  //       <div>User: <code>{user ? JSON.stringify(user) : 'null'}</code></div>
-  //       <button onClick={refresh} style={{ marginRight: 8 }}>Refresh</button>
-  //       <button onClick={handleLogout} style={{ marginRight: 8 }}>Logout</button>
-  //       {error && <div style={{ color: 'red' }}>{error}</div>}
-  //     </div>
-  //   );
-  // }
-
   return (
     <div className={styles.loginScreenRoot}>
       <TitleBar />
-      <div className={styles.loginCard}>
-        <div className={styles.loginHeader}>
-          <img src={"/placeholder-sell.png"} alt="MLShopHelper logo" className={styles.logoIcon} />
-          <span className={styles.loginTitle}>MLShopHelper</span>
-        </div>
-        {/* <DebugSessionInfo /> */}
-        <div className={styles.loginContentCenter}>
-          <button
-            className={styles.loginButton}
-            onClick={handlePersistentAnonLogin}
-            disabled={loading}
-          >
-            {loading ? "Creating..." : "Create New Secret Login"}
-          </button>
-          <hr />
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              if (!loading && persistentSecret) handleLoginWithPersistentSecret();
-            }}
-            style={{ width: '100%' }}
-          >
-            <div className={styles.inputGroup}>
-              <label className={styles.inputLabel} htmlFor="persistent-secret-input">
-                Login with Your Login Key:
-              </label>
-              <input
-                id="persistent-secret-input"
-                className={styles.loginInput}
-                type="password"
-                value={persistentSecret}
-                onChange={e => setPersistentSecret(e.target.value)}
-                placeholder="Paste your login key here (email:secret)"
-                disabled={loading}
-                autoComplete="off"
-              />
-            </div>
+      <div className={styles.loginScreenFlexRow}>
+        <div className={styles.loginCard}>
+          <div className={styles.loginHeader}>
+            <img src={"/placeholder-sell.png"} alt="MLShopHelper logo" className={styles.logoIcon} />
+            <span className={styles.loginTitle}>MLShopHelper</span>
+          </div>
+          {/* <DebugSessionInfo /> */}
+          <div className={styles.loginContentCenter}>
             <button
               className={styles.loginButton}
-              type="submit"
-              disabled={loading || !persistentSecret}
+              onClick={handlePersistentAnonLogin}
+              disabled={loading}
             >
-              {loading ? "Logging in..." : "Login with Secret"}
+              {loading ? "Creating..." : "Create New Secret Login"}
             </button>
-          </form>
-          {showSecretPrompt && (
-            <div className={styles.secretPrompt}>
-              <b>Save your Login Key!</b>
-              <div style={{ wordBreak: 'break-all', background: '#181818', padding: 8, borderRadius: 6 }}>
-                <code style={{ userSelect: 'all', flex: 1 }}>{savedPersistentSecret}</code>
+            <hr />
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                if (!loading && persistentSecret) handleLoginWithPersistentSecret();
+              }}
+              style={{ width: '100%' }}
+            >
+              <div className={styles.inputGroup}>
+                <label className={styles.inputLabel} htmlFor="persistent-secret-input">
+                  Login with Your Login Key:
+                </label>
+                <input
+                  id="persistent-secret-input"
+                  className={styles.loginInput}
+                  type="password"
+                  value={persistentSecret}
+                  onChange={e => setPersistentSecret(e.target.value)}
+                  placeholder="Paste your login key here (email:secret)"
+                  disabled={loading}
+                  autoComplete="off"
+                />
               </div>
               <button
-                type="button"
                 className={styles.loginButton}
-                style={{ padding: '4px 10px', fontSize: 13, marginTop: 8 }}
-                onClick={handleCopyLoginKey}
-                tabIndex={0}
+                type="submit"
+                disabled={loading || !persistentSecret}
               >
-                Copy
+                {loading ? "Logging in..." : "Login with Secret"}
               </button>
-              {copySuccess && (
-                <span style={{ color: '#5ffb7a', fontSize: 13, marginLeft: 4 }}>{copySuccess}</span>
-              )}
-              <div style={{ color: '#ffb700', fontSize: 13, marginBottom: 6, marginTop: 8 }}>
-                You need this key to log in again. <b>Save it somewhere safe!</b>
+            </form>
+            {showSecretPrompt && (
+              <div className={styles.secretPrompt}>
+                <b>Save your Login Key!</b>
+                <div style={{ wordBreak: 'break-all', background: '#181818', padding: 8, borderRadius: 6 }}>
+                  <code style={{ userSelect: 'all', flex: 1 }}>{savedPersistentSecret}</code>
+                </div>
+                <button
+                  type="button"
+                  className={styles.loginButton}
+                  style={{ padding: '4px 10px', fontSize: 13, marginTop: 8 }}
+                  onClick={handleCopyLoginKey}
+                  tabIndex={0}
+                >
+                  Copy
+                </button>
+                {copySuccess && (
+                  <span style={{ color: '#5ffb7a', fontSize: 13, marginLeft: 4 }}>{copySuccess}</span>
+                )}
+                <div style={{ color: '#ffb700', fontSize: 13, marginBottom: 6, marginTop: 8 }}>
+                  You need this key to log in again. <b>Save it somewhere safe!</b>
+                </div>
+                <button className={styles.loginButton} onClick={() => setShowSecretPrompt(false)}>
+                  I have saved my login key
+                </button>
               </div>
-              <button className={styles.loginButton} onClick={() => setShowSecretPrompt(false)}>
-                I have saved my login key
-              </button>
-            </div>
-          )}
-          {error && <div className={styles.loginError}>{error}</div>}
+            )}
+            {error && <div className={styles.loginError}>{error}</div>}
+          </div>
+        </div>
+        <div className={styles.loginImageCol}>
+          <div className={styles.loginImageBg}>
+            <img
+              src="/MLLoginHero.jpg"
+              alt="Login visual"
+              className={styles.loginImage}
+            />
+          </div>
         </div>
       </div>
     </div>

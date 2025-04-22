@@ -11,6 +11,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [savedPersistentSecret, setSavedPersistentSecret] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copySuccess, setCopySuccess] = useState("");
 
   // Handler for persistent anonymous login
   const handlePersistentAnonLogin = async () => {
@@ -70,6 +71,18 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
       console.error('Login failed:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- Copy login key to clipboard ---
+  const handleCopyLoginKey = async () => {
+    try {
+      await navigator.clipboard.writeText(savedPersistentSecret);
+      setCopySuccess("Copied!");
+      setTimeout(() => setCopySuccess(""), 1600);
+    } catch {
+      setCopySuccess("Copy failed");
+      setTimeout(() => setCopySuccess(""), 1600);
     }
   };
 
@@ -170,8 +183,20 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {showSecretPrompt && (
             <div className={styles.secretPrompt}>
               <b>Save your Login Key!</b>
-              <div style={{ margin: '8px 0', wordBreak: 'break-all', background: '#181818', padding: 8, borderRadius: 6 }}>
-                <code>{savedPersistentSecret}</code>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0', wordBreak: 'break-all', background: '#181818', padding: 8, borderRadius: 6 }}>
+                <code style={{ userSelect: 'all', flex: 1 }}>{savedPersistentSecret}</code>
+                <button
+                  type="button"
+                  className={styles.loginButton}
+                  style={{ padding: '4px 10px', fontSize: 13 }}
+                  onClick={handleCopyLoginKey}
+                  tabIndex={0}
+                >
+                  Copy
+                </button>
+                {copySuccess && (
+                  <span style={{ color: '#5ffb7a', fontSize: 13, marginLeft: 4 }}>{copySuccess}</span>
+                )}
               </div>
               <div style={{ color: '#ffb700', fontSize: 13, marginBottom: 6 }}>
                 You need this key to log in again. <b>Save it somewhere safe!</b>

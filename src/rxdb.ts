@@ -156,35 +156,60 @@ export async function replicateItemStatsAppwrite(db: RxDatabase) {
 // Database instance singleton
 let dbPromise: Promise<RxDatabase> | null = null;
 
+// Defensive: Actually create a new DB
+async function createDb() {
+  // (Move your db creation logic here from getDb)
+  const db = await createRxDatabase({
+    name: 'mlshophelper',
+    storage,
+    ignoreDuplicate: true,
+    eventReduce: true,
+    multiInstance: false, // Tauri: single instance
+  });
+  await db.addCollections({
+    items: { schema: itemSchema },
+    priceHistory: { schema: priceHistorySchema },
+    itemStats: { schema: itemStatsSchema },
+  });
+  // Setup replication, etc.
+  await replicateItemsAppwrite(db);
+  await replicatePriceHistorySandbox(db);
+  await replicateItemStatsAppwrite(db);
+  return db;
+}
+
 // Add a closeDb function to allow reinitialization after login/logout
 export async function closeDb() {
-  dbPromise = null;
+  if (dbPromise) {
+    try {
+      const db = await dbPromise;
+      await db.close();
+    } catch (e) {
+      console.error('[RxDB] Error closing DB:', e);
+    }
+    dbPromise = null;
+  }
 }
 
 export async function getDb() {
   if (!dbPromise) {
-    dbPromise = createRxDatabase({
-      name: 'mlshophelper',
-      storage, // <-- use the validated storage
-      multiInstance: false,
-      closeDuplicates: true, 
-    }).then(async db => {
-      // Add collections if not exist
-      await db.addCollections({
-        items: { schema: itemSchema },
-        priceHistory: { schema: priceHistorySchema },
-        itemStats: { schema: itemStatsSchema }, // <-- add itemStats
-      });
-
-      // --- Start Appwrite replication for items and priceHistory ---
-      await replicateItemsAppwrite(db);
-      await replicatePriceHistorySandbox(db);
-      await replicateItemStatsAppwrite(db);
-
-      return db;
-    });
+    dbPromise = createDb();
   }
-  return dbPromise;
+  let db: RxDatabase;
+  try {
+    db = await dbPromise;
+  } catch (e) {
+    // If creation fails, reset and rethrow
+    dbPromise = null;
+    throw e;
+  }
+  // Defensive: check if closed
+  if (db.isClosed) {
+    console.warn('[RxDB] DB was closed, recreating...');
+    dbPromise = createDb();
+    db = await dbPromise;
+  }
+  return db;
 }
 
 // --- Compute and update itemStats from priceHistory ---

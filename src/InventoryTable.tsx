@@ -118,6 +118,28 @@ export default function InventoryTable({
     [itemStats]
   );
 
+  // Add debug logging to InventoryTable props and key variables
+  useEffect(() => {
+    console.debug('[InventoryTable] filteredItems received:', filteredItems);
+    if (filteredItems && filteredItems.length > 0) {
+      console.debug('[InventoryTable] validItems after $id filter:', filteredItems);
+      console.debug('[InventoryTable] validItems IDs:', filteredItems.map(i => i.$id));
+    }
+    if (userPriceMap) {
+      console.debug('[InventoryTable] userPriceMap:', userPriceMap, 'keys:', Array.from(userPriceMap.keys()));
+    }
+    if (statsMap) {
+      console.debug('[InventoryTable] statsMap:', statsMap, 'keys:', Array.from(statsMap.keys()));
+    }
+    if (filteredItems && filteredItems.length > 0 && statsMap) {
+      const missingStats = filteredItems.filter(item => !statsMap.has(item.$id)).map(item => item.$id);
+      console.debug('[InventoryTable] Item IDs missing in statsMap:', missingStats);
+      if (filteredItems[0] && statsMap.has(filteredItems[0].$id)) {
+        console.debug('[InventoryTable] Sample stats for first item:', statsMap.get(filteredItems[0].$id));
+      }
+    }
+  }, [filteredItems, userPriceMap, statsMap]);
+
   // Debug: log statsMap and a sample stats entry for the first row
   useEffect(() => {
     console.log('[InventoryTable] userPriceMap:', userPriceMap);
@@ -358,14 +380,27 @@ export default function InventoryTable({
   // Keyboard navigation state
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
 
+  // Track if row action hotkeys (d/s) are enabled
+  const [hotkeysEnabled, setHotkeysEnabled] = useState(false);
+
+  // Disable hotkeys when search is focused or changed
+  useEffect(() => {
+    setHotkeysEnabled(false);
+  }, [search]);
+
   // Arrow key navigation (up/down)
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const modalOpen = !!document.querySelector('.global-modal');
       const active = document.activeElement as HTMLElement | null;
-      // D: Open price history modal for selected item
+      // Arrow keys: enable hotkeys after user navigates
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !modalOpen) {
+        setHotkeysEnabled(true);
+      }
+      // D: Open price history modal for selected item (only if hotkeys enabled)
       if (
         e.key === 'd' &&
+        hotkeysEnabled &&
         !modalOpen &&
         selectedRowIdx != null &&
         visibleRows[selectedRowIdx]
@@ -374,9 +409,10 @@ export default function InventoryTable({
         openHistoryModal(visibleRows[selectedRowIdx].original);
         return;
       }
-      // S: Open stock modal for selected item
+      // S: Open stock modal for selected item (only if hotkeys enabled)
       if (
         e.key === 's' &&
+        hotkeysEnabled &&
         !modalOpen &&
         selectedRowIdx != null &&
         visibleRows[selectedRowIdx]
@@ -415,7 +451,7 @@ export default function InventoryTable({
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [visibleRows, selectedRowIdx]);
+  }, [visibleRows, selectedRowIdx, hotkeysEnabled, search]);
 
   // Scroll selected row into view
   useEffect(() => {
@@ -436,6 +472,7 @@ export default function InventoryTable({
           ref={searchInputRef}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => setHotkeysEnabled(false)}
           placeholder="Search items..."
           className="row search-input"
         />

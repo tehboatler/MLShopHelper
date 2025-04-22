@@ -61,6 +61,16 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userKarma, setUserKarma] = useState<number | null>(null);
   const [dbReady, setDbReady] = useState(false);
+  // Debug: Track changes to dbReady, loggedIn, userId
+  useEffect(() => {
+    console.debug('[DEBUG] dbReady changed:', dbReady);
+  }, [dbReady]);
+  useEffect(() => {
+    console.debug('[DEBUG] loggedIn changed:', loggedIn);
+  }, [loggedIn]);
+  useEffect(() => {
+    console.debug('[DEBUG] userId changed:', userId);
+  }, [userId]);
   // Only fetch RxDB items if authenticated
   const [items, itemsLoading] = useRxdbItems(!!loggedIn && dbReady);
 
@@ -69,21 +79,56 @@ export default function App() {
   const [priceHistoryData, priceHistoryLoading] = useRxdbPriceHistory([priceHistory, setPriceHistory]);
   const [saleWarning, setSaleWarning] = useState<{ open: boolean, itemId?: string, itemName?: string, price?: number, notes?: string } | null>(null);
 
-  // --- userPriceMap: always derived from RxDB live data ---
+  // --- Persistent User ID state ---
+  const [persistentUserId, setPersistentUserId] = useState(() => localStorage.getItem('persistentUserId'));
+
+  // Update persistentUserId whenever login state changes
+  useEffect(() => {
+    const id = localStorage.getItem('persistentUserId');
+    setPersistentUserId(id);
+    console.debug('[App] persistentUserId updated from localStorage:', id, typeof id);
+  }, [loggedIn]);
+
+  // --- User Price Map Memo ---
   const userPriceMap = useMemo(() => {
-    if (!dbReady) return new Map();
-    const persistentUserId = localStorage.getItem('persistentUserId');
-    const map = new Map<string, PriceHistoryEntry>();
-    if (!persistentUserId) return map;
-    // Find latest entry per item for this user
-    priceHistory
-      .filter(e => e.author === persistentUserId)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .forEach(entry => {
-        if (!map.has(entry.itemId)) map.set(entry.itemId, entry);
-      });
+    if (!dbReady || !persistentUserId) {
+      console.debug('[App] userPriceMap: Not ready (dbReady:', dbReady, ', persistentUserId:', persistentUserId, ')');
+      return new Map();
+    }
+    // Debug: Print a sample of priceHistory entries
+    console.debug('[App] priceHistory sample (first 5):', priceHistory.slice(0, 5));
+    if (priceHistory.length > 0) {
+      for (let i = 0; i < Math.min(5, priceHistory.length); i++) {
+        const e = priceHistory[i];
+        console.debug(`[App] priceHistory[${i}]`, {
+          id: e.id,
+          itemId: e.itemId,
+          author: e.author,
+          authorType: typeof e.author,
+          persistentUserId,
+          persistentUserIdType: typeof persistentUserId
+        });
+      }
+    }
+    // Only include price history for this user
+    const filtered = priceHistory.filter(e => e.author === persistentUserId);
+    // Sort by date descending (latest first)
+    filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const map = new Map();
+    filtered.forEach(entry => {
+      // Prefer itemId, fallback to id if needed
+      const key = entry.itemId || entry.id;
+      if (key && !map.has(key)) map.set(key, entry);
+    });
+    console.debug('[App] userPriceMap recomputed:', {
+      persistentUserId,
+      filteredCount: filtered.length,
+      mapSize: map.size,
+      keys: Array.from(map.keys()).slice(0, 5),
+      sampleEntry: filtered[0] || null
+    });
     return map;
-  }, [dbReady, priceHistory]);
+  }, [dbReady, priceHistory, persistentUserId]);
 
   useEffect(() => {
     console.log('[DEBUG] RxDB items:', items);
@@ -421,6 +466,21 @@ export default function App() {
   const openHistoryModal = (item: Item) => {
     setPriceHistoryModal({ open: true, itemId: item.$id });
   };
+
+  // --- Debug: Log priceHistory emissions and authors ---
+  useEffect(() => {
+    console.debug('[App] priceHistory changed, length:', priceHistory.length);
+    if (priceHistory.length > 0) {
+      console.debug('[App] priceHistory first 5:', priceHistory.slice(0, 5));
+      const authors = Array.from(new Set(priceHistory.map(e => e.author)));
+      console.debug('[App] unique authors in priceHistory:', authors);
+      if (persistentUserId) {
+        console.debug('[App] persistentUserId:', persistentUserId, 'type:', typeof persistentUserId);
+        const matches = priceHistory.filter(e => e.author === persistentUserId);
+        console.debug('[App] priceHistory entries matching persistentUserId:', matches.length, matches.slice(0, 3));
+      }
+    }
+  }, [priceHistory, persistentUserId]);
 
   // --- Rest of App logic and rendering ---
   async function handleAddOrEdit(e: React.FormEvent) {

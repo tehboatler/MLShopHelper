@@ -15,6 +15,7 @@ export function useRxdbItems(isAuthenticated: boolean = true): [Item[], boolean]
     let sub: any;
     getDb().then(db => {
       sub = db.items.find().$.subscribe(docs => {
+        console.debug('[useRxdbItems] RxDB emission:', docs.map(doc => doc.toJSON()));
         setItems(docs.map(doc => {
           const json = doc.toJSON();
           // Always provide $id for UI/types compatibility (copy to new object to avoid mutation error)

@@ -14,6 +14,7 @@ interface StockModalProps {
   selectedCharacterId: string | null;
   setToast: (toast: { msg: string; visible: boolean }) => void;
   onAddToStore?: (characterId: string, itemId: string, amount: number) => void;
+  onRemoveFromStore?: (characterId: string, itemId: string) => void;
   onSetStock?: (characterId: string, itemId: string, amount: number) => void;
   handleChangePrice: (itemId: string, newPrice: number, notes?: string, isSale?: boolean, itemName?: string) => Promise<void>;
   priceHistoryData: any; // Add this prop
@@ -29,6 +30,7 @@ export function StockModal({
   selectedCharacterId,
   setToast,
   onAddToStore,
+  onRemoveFromStore,
   onSetStock,
   handleChangePrice,
   priceHistoryData, // Add this prop
@@ -211,6 +213,45 @@ export function StockModal({
     }
   }
 
+  function handleRemoveFromStore() {
+    if (onRemoveFromStore) {
+      onRemoveFromStore(characterId, itemId);
+      setToast({ msg: `${itemName} removed from store.`, visible: true });
+      onClose();
+      return;
+    }
+    // fallback: legacy localStorage logic (for dev/test only)
+    let localChars: Character[] = [];
+    try { localChars = JSON.parse(localStorage.getItem('characters') || '[]'); } catch {}
+    const idx = localChars.findIndex(c => c.id === characterId);
+    let removed = false;
+    if (idx !== -1) {
+      const char = { ...localChars[idx] };
+      if (char.shop && char.shop.itemCounts && char.shop.itemCounts[itemId]) {
+        delete char.shop.itemCounts[itemId];
+        if (char.shop.order) {
+          char.shop.order = char.shop.order.filter((id: string) => id !== itemId);
+        }
+        localChars[idx] = char;
+        localStorage.setItem('characters', JSON.stringify(localChars));
+        removed = true;
+      }
+    }
+    let localItems: any[] = [];
+    try { localItems = JSON.parse(localStorage.getItem('localItems') || '[]'); } catch {}
+    const newLocalItems = localItems.filter((i: any) => i.$id !== itemId);
+    if (newLocalItems.length !== localItems.length) {
+      localStorage.setItem('localItems', JSON.stringify(newLocalItems));
+      removed = true;
+    }
+    if (removed) {
+      setToast({ msg: `${itemName} removed from store.`, visible: true });
+      onClose();
+    } else {
+      setToast({ msg: `Item not found in store or local items.`, visible: true });
+    }
+  }
+
   function adjustAmount(val: number) {
     setAmount(a => Math.max(1, a + val));
   }
@@ -285,7 +326,7 @@ export function StockModal({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 8, width:inputWidth, padding:'4px 0 0 0' }}>
-          <button onClick={onClose} style={{ background: 'none', border: '1.5px solid #888', color: '#fff', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 500, transition: 'background 0.15s, color 0.15s' }}>Cancel</button>
+          <button onClick={onClose} style={{ background: 'none', border: '1.5px solid #888', color: '#fff', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 500, transition: 'background 0.15s, color 0.15s', margin: 0 }}>Cancel</button>
           <button
             style={{
               background: alreadyLogged24h ? '#888' : 'linear-gradient(90deg,#2d8cff,#5fcfff)',
@@ -297,15 +338,16 @@ export function StockModal({
               fontSize: 15,
               cursor: alreadyLogged24h ? 'not-allowed' : 'pointer',
               opacity: alreadyLogged24h ? 0.7 : 1,
-              marginRight: 12
+              margin: 0
             }}
             onClick={alreadyLogged24h ? undefined : handleQuickSell}
             disabled={alreadyLogged24h}
           >
             Log Quick Sell <span style={{fontSize:13,marginLeft:6,opacity:0.7}}>(Q)</span>
           </button>
-          <button onClick={handleAddToStore} style={{ background: 'linear-gradient(90deg,#a87e2f,#ffd27a)', border: 'none', color: '#232323', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #a87e2f22', transition: 'background 0.15s' }}>Add to Store <span style={{fontSize:13,marginLeft:6,opacity:0.7}}>(S)</span></button>
-          <button onClick={() => setChangePriceOpen(true)} style={{ background: 'linear-gradient(90deg,#2d8cff,#5fcfff)', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #2d8cff22', transition: 'background 0.15s' }}>Change Price</button>
+          <button onClick={handleAddToStore} style={{ background: 'linear-gradient(90deg,#a87e2f,#ffd27a)', border: 'none', color: '#232323', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #a87e2f22', transition: 'background 0.15s', margin: 0 }}>Add to Store <span style={{fontSize:13,marginLeft:6,opacity:0.7}}>(S)</span></button>
+          <button onClick={() => setChangePriceOpen(true)} style={{ background: 'linear-gradient(90deg,#2d8cff,#5fcfff)', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #2d8cff22', transition: 'background 0.15s', margin: 0 }}>Change Price</button>
+          <button onClick={handleRemoveFromStore} style={{ background: 'none', border: '1.5px solid #e74c3c', color: '#e74c3c', borderRadius: 8, padding: '8px 14px', fontSize: 14, cursor: 'pointer', fontWeight: 700, transition: 'background 0.15s, color 0.15s', margin: 0 }}>Remove from Store</button>
         </div>
         {changePriceOpen && (
           <ChangePriceModal

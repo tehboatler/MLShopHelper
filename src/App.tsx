@@ -11,7 +11,7 @@ import { Modal } from "./Modal"; // TODO: Use this reusable Modal component for 
 import { ContextMenu } from "./ContextMenu";
 import { PriceHistoryModal } from "./PriceHistoryModal";
 import { SellModal } from "./SellModal";
-import { ItemNameAutocomplete } from "./ItemNameAutocomplete";
+
 // import { SectionHeader } from "./SectionHeader";
 import { StockModal } from "./StockModal";
 import { ShopItemModal } from "./ShopItemModal";
@@ -28,7 +28,6 @@ import { getPersistentAnonUserById } from "./api/persistentAnon";
 import { UISettingsContext } from "./contexts/UISettingsContext";
 import type { DropResult } from '@hello-pangea/dnd';
 import {
-  handleStock as makeHandleStock,
   handleDeleteInventoryItem as makeHandleDeleteInventoryItem,
   handleAddCharacter as makeHandleAddCharacter,
   // handleCharacterSelect as makeHandleCharacterSelect,
@@ -42,7 +41,7 @@ import {
   handleRecordSale as makeHandleRecordSale
 } from './handlers/inventoryHandlers';
 // import { getDb } from './rxdb';
-import { getLatestUserPriceEntriesBatchRX, getLatestSoldEntriesBatchRX } from './priceHistoryRXDB';
+import { getLatestSoldEntriesBatchRX } from './priceHistoryRXDB';
 import Ledger from "./Ledger";
 import AddEditItemModal from "./AddEditItemModal";
 import { useRxdbItems } from './hooks/useRxdbItems';
@@ -54,6 +53,7 @@ import { subscribeToAppwriteRealtimeForItems } from './rxdb';
 import { closeDb, getDb } from './rxdb';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 import { SaleWarningModal } from "./SaleWarningModal";
+import { addItem } from './api/items';
 
 export default function App() {
   // --- All hooks and state declarations ---
@@ -76,7 +76,7 @@ export default function App() {
 
   // --- RxDB price history live subscription ---
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
-  const [priceHistoryData, priceHistoryLoading] = useRxdbPriceHistory([priceHistory, setPriceHistory]);
+  const [priceHistoryData, __] = useRxdbPriceHistory([priceHistory, setPriceHistory]);
   const [saleWarning, setSaleWarning] = useState<{ open: boolean, itemId?: string, itemName?: string, price?: number, notes?: string } | null>(null);
 
   // --- Persistent User ID state ---
@@ -493,22 +493,26 @@ export default function App() {
         //   notes: modalState.editingItem.notes,
         // });
       } else {
-        // await addItem({
-        //   name: modalState.name,
-        //   price: parseFloat(modalState.price),
-        //   notes: '',
-        // });
+        // Add item to Appwrite via RxDB (replication will sync)
+        const result = await addItem({
+          name: modalState.name,
+          price: parseFloat(modalState.price),
+          notes: '',
+        });
+        console.debug('[AddItem] Added item result:', result);
       }
       dispatchModal({ type: 'CLOSE' });
+      // Optionally refresh UI if needed
       // fetchItems();
     } catch (err: any) {
+      console.error('[AddItem] Error:', err);
       showToast(`Error: ${err?.toString() || err}`);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       toastTimeoutRef.current = setTimeout(() => setToast(t => ({ ...t, visible: false })), 2600);
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(_: string) {
     try {
       // await deleteItem(id);
       // fetchItems();
@@ -670,7 +674,7 @@ export default function App() {
   const handlePriceHistory = makeHandlePriceHistory(setPriceHistoryModal, inventoryContextMenu);
   const handleRecordSale = makeHandleRecordSale(setSellItem, setSellModalOpen, itemMap, inventoryContextMenu);
   const handleDeleteInventoryItem = makeHandleDeleteInventoryItem(setCharacters, selectedCharacter, inventoryContextMenu);
-  const handleStock = makeHandleStock(setCharacters, setSelectedCharacter, setStockDialog);
+  // const handleStock = makeHandleStock(setCharacters, setSelectedCharacter, setStockDialog);
 
   async function handleCloseShopItemModal() {
     setShopItemModal({ open: false });
@@ -745,6 +749,33 @@ export default function App() {
   }
   if (loggedIn === false) {
     return <LoginScreen onLogin={checkAuth} />;
+  }
+
+  function handleRemoveFromStore(characterId: string, itemId: string) {
+    setCharacters(chars => {
+      const updated = chars.map(c => {
+        if (c.id !== characterId) return c;
+        const counts = { ...(c.shop.itemCounts || {}) };
+        delete counts[itemId];
+        const order = Array.isArray(c.shop.order)
+          ? c.shop.order.filter(id => id !== itemId)
+          : [];
+        return { ...c, shop: { itemCounts: counts, order } };
+      });
+      localStorage.setItem('characters', JSON.stringify(updated));
+      const updatedChar = updated.find(c => c.id === characterId);
+      if (updatedChar) setSelectedCharacter(updatedChar);
+      setToast({
+        msg: `${itemMap[itemId]?.name ?? ''} removed from store for ${updatedChar?.name ?? ''}.`,
+        visible: true,
+      });
+      return updated;
+    });
+    setStockDialog({ open: false, itemId: undefined });
+  }
+
+  function handleInventoryItemSelect(itemName: string) {
+    setSearch(itemName);
   }
 
   return (
@@ -870,6 +901,8 @@ export default function App() {
                   getLastUserPriceEntry={getLastUserPriceEntry}
                   selectedCharacter={selectedCharacter}
                   handleOpenStockDialog={handleOpenStockDialog}
+                  onRemoveFromStore={handleRemoveFromStore}
+                  onItemSelected={handleInventoryItemSelect}
                 />
               )}
               {inventoryTab === 'ledger' && (
@@ -1040,6 +1073,7 @@ export default function App() {
               setStockDialog({ open: false, itemId: undefined });
             }}
             handleChangePrice={handleChangePrice}
+            onRemoveFromStore={handleRemoveFromStore}
           />
         )}
         <ShopItemModal
@@ -1071,13 +1105,6 @@ export default function App() {
             itemName={saleWarning.itemName}
           />
         )}
-        {/* TEMP: Button to debug Appwrite session */}
-        <button
-          style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 5000, background: '#2d8cff', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, boxShadow: '0 2px 10px #0003', cursor: 'pointer' }}
-          onClick={debugAppwriteSession}
-        >
-          Debug Appwrite Session
-        </button>
       </main>
     </UISettingsContext.Provider>
   );

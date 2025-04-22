@@ -252,7 +252,7 @@ export default function InventoryTable({
           style={{ cursor: 'pointer', userSelect: 'none' }}
           onClick={column.getToggleSortingHandler()}
         >
-          Median Price {column.getIsSorted() === 'asc' ? '▲' : column.getIsSorted() === 'desc' ? '▼' : ''}
+          Median {column.getIsSorted() === 'asc' ? '▲' : column.getIsSorted() === 'desc' ? '▼' : ''}
         </span>
       ),
       enableSorting: true,
@@ -467,16 +467,107 @@ export default function InventoryTable({
 
   return (
     <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 }}>
-      <div className="search-row">
-        <input
-          ref={searchInputRef}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onFocus={() => setHotkeysEnabled(false)}
-          placeholder="Search items..."
-          className="row search-input"
-        />
-        <button className="add-btn" onClick={() => setModalOpen(true)}>Add Item</button>
+      <div className="search-row" style={{ position: 'relative', display: 'flex', alignItems: 'center', marginBottom: 15 }}>
+        {/* Input + icon wrapper */}
+        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+          <input
+            ref={searchInputRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => setHotkeysEnabled(false)}
+            placeholder="Search items..."
+            className="row search-input"
+            style={{
+              width: '100%',
+              paddingRight: 40, // ensure space for icon
+              height: 40,
+              fontSize: 18,
+              borderRadius: 8,
+              border: '1px solid #333',
+              background: '#232323',
+              color: '#eee',
+              fontWeight: 500,
+              boxSizing: 'border-box',
+            }}
+          />
+          {/* Hotkey legend icon absolutely inside input wrapper */}
+          <span
+            tabIndex={0}
+            style={{
+              position: 'absolute',
+              right: 20,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: '#222',
+              color: '#bbb',
+              borderRadius: '50%',
+              width: 22,
+              height: 22,
+              fontSize: 15,
+              fontWeight: 700,
+              textAlign: 'center',
+              lineHeight: '22px',
+              cursor: 'pointer',
+              boxShadow: '0 1px 4px #0002',
+              userSelect: 'none',
+              outline: 'none',
+              border: 'none',
+              zIndex: 12,
+              transition: 'background 0.15s',
+              pointerEvents: 'auto',
+            }}
+            onFocus={e => e.currentTarget.setAttribute('data-show', '1')}
+            onBlur={e => e.currentTarget.removeAttribute('data-show')}
+            onMouseEnter={e => e.currentTarget.setAttribute('data-show', '1')}
+            onMouseLeave={e => e.currentTarget.removeAttribute('data-show')}
+            aria-label="Show hotkey guide"
+          >
+            ?
+          </span>
+          <div
+            style={{
+              display: 'none',
+              position: 'absolute',
+              top: 38,
+              right: 20,
+              minWidth: 200,
+              maxWidth: 270,
+              background: 'rgba(32,32,32,0.97)',
+              color: '#bbb',
+              borderRadius: 6,
+              padding: '12px 14px 10px 14px',
+              fontSize: 14,
+              lineHeight: 1.7,
+              boxShadow: '0 2px 8px #0004',
+              zIndex: 100,
+              pointerEvents: 'auto',
+              whiteSpace: 'normal',
+            }}
+            className="hotkey-tooltip"
+          >
+            <div style={{fontWeight: 700, fontSize: 15, marginBottom: 2, letterSpacing: 0.2}}>Hotkeys</div>
+            <ul style={{paddingLeft: 18, margin: '7px 0 10px 0'}}>
+              <li><span style={{fontWeight:600, color:'#fff'}}>Arrow Keys</span>: Navigate rows</li>
+              <li><span style={{fontWeight:600, color:'#fff'}}>D</span>: Show price history (when a row is selected)</li>
+              <li><span style={{fontWeight:600, color:'#fff'}}>S</span>: Show stock modal (when a row is selected)</li>
+              <li><span style={{fontWeight:600, color:'#fff'}}>Enter</span>: Focus search bar</li>
+            </ul>
+            <div style={{color:'#888', fontSize:12, marginTop: 8}}>
+              Hotkeys are disabled while typing in the search bar.<br />
+              Use arrow keys to re-enable.
+            </div>
+          </div>
+          <style>{`
+            .hotkey-tooltip {
+              display: none;
+            }
+            span[data-show="1"] + .hotkey-tooltip {
+              display: block !important;
+            }
+          `}</style>
+        </div>
+        {/* Add Item button remains outside input wrapper */}
+        <button className="add-btn" onClick={() => setModalOpen(true)} style={{ marginLeft: 14, height: 40, fontSize: 16 }}>Add Item</button>
       </div>
       <div
         ref={tableContainerRef}

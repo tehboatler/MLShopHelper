@@ -498,12 +498,6 @@ export function PriceHistoryModal({ open, onClose, itemId, itemName, currentPric
                 </table>
               </div>
             </div>
-            <button onClick={() => {
-              setChangeModalOpen(true); // open modal instantly
-              if (currentUserId) {
-                getIGNForUserId(currentUserId).then(ign => setCurrentUserIGN(ign || ""));
-              }
-            }} style={{marginTop:16}}>Change Current Sale Price</button>
             <ChangePriceModal
               open={changeModalOpen}
               onClose={() => setChangeModalOpen(false)}

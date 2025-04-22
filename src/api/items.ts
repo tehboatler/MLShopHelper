@@ -1,6 +1,5 @@
 import { databases, account } from "../lib/appwrite";
 import { getDb } from '../rxdb';
-import { nanoid } from 'nanoid';
 
 const databaseId = import.meta.env.VITE_APPWRITE_DATABASE!;
 const collectionId = import.meta.env.VITE_APPWRITE_ITEMS_COLLECTION!;
@@ -10,14 +9,24 @@ export async function getItems() {
 }
 
 export async function addItem(data: { name: string; price: number; notes?: string }) {
+  // Create in Appwrite, let Appwrite assign the ID
+  const doc = await databases.createDocument(
+    databaseId,
+    collectionId,
+    'unique()', // Let Appwrite generate the ID
+    {
+      ...data,
+      owned: true,
+      price: data.price,
+    }
+  );
+  // Upsert to RxDB using Appwrite's $id as id
   const db = await getDb();
-  const id = nanoid();
-  // Insert item into RxDB; Appwrite sync handled by replication
-  return db.items.insert({
+  await db.items.upsert({
     ...data,
-    id,
+    id: doc.$id,
     owned: true,
-    current_selling_price: data.price,
+    price: data.price,
   });
 }
 

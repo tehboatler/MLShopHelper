@@ -24,7 +24,7 @@ export function useRxdbItems(isAuthenticated: boolean = true): [Item[], boolean]
         setLoading(false);
       });
     });
-    return () => sub?.unsubscribe();
+    return () => sub && sub.unsubscribe();
   }, [isAuthenticated]);
   return [items, loading];
 }

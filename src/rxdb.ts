@@ -73,6 +73,7 @@ export const itemStatsSchema = {
   properties: {
     itemId: { type: 'string', maxLength: 128 },
     p25: { type: ['number', 'null'] },
+    count: { type: 'number' },
     median: { type: ['number', 'null'] },
     avg: { type: ['number', 'null'] },
     p75: { type: ['number', 'null'] },
@@ -149,12 +150,16 @@ export async function replicateItemStatsAppwrite(db: RxDatabase) {
     db,
     collectionName: 'itemStats',
     replicationIdentifier: 'item-stats-replication',
-    envCollectionVar: 'VITE_APPWRITE_ITEM_STATS_COLLECTION',
+    envCollectionVar: 'VITE_APPWRITE_STATS_COLLECTION',
   });
 }
 
 // Database instance singleton
 let dbPromise: Promise<RxDatabase> | null = null;
+
+// --- DB epoch for RxDB instance tracking ---
+let dbEpoch = 0;
+export function getDbEpoch() { return dbEpoch; }
 
 // Defensive: Actually create a new DB
 async function createDb() {
@@ -180,15 +185,13 @@ async function createDb() {
 
 // Add a closeDb function to allow reinitialization after login/logout
 export async function closeDb() {
-  if (dbPromise) {
-    try {
-      const db = await dbPromise;
-      await db.close();
-    } catch (e) {
-      console.error('[RxDB] Error closing DB:', e);
-    }
-    dbPromise = null;
+  if (!dbPromise) return;
+  const db = await dbPromise;
+  if (!db.isClosed) {
+    await db.remove();
   }
+  dbPromise = null;
+  dbEpoch++; // Increment epoch so hooks re-subscribe
 }
 
 export async function getDb() {
@@ -271,6 +274,19 @@ function percentile(arr: number[], p: number): number | null {
   if (lower === upper) return arr[lower];
   return arr[lower] + (arr[upper] - arr[lower]) * (idx - lower);
 }
+
+// --- Auto-update itemStats when priceHistory changes ---
+getDb().then(db => {
+  db.priceHistory.find().$.subscribe(async (docs) => {
+    if (docs && docs.length > 0) {
+      // Debounce: only run if at least 500ms since last call
+      if (!(window as any)._lastStatsUpdate || Date.now() - (window as any)._lastStatsUpdate > 500) {
+        (window as any)._lastStatsUpdate = Date.now();
+        await updateAllItemStats();
+      }
+    }
+  });
+});
 
 // --- Appwrite Realtime subscription for RxDB sync ---
 import { client } from './lib/appwrite';

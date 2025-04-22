@@ -86,51 +86,51 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
   };
 
-  function DebugSessionInfo() {
-    const [user, setUser] = useState<any>(null);
-    const [sessionType, setSessionType] = useState<string>("");
-    const [error, setError] = useState<string>("");
+  // function DebugSessionInfo() {
+  //   const [user, setUser] = useState<any>(null);
+  //   const [sessionType, setSessionType] = useState<string>("");
+  //   const [error, setError] = useState<string>("");
 
-    async function refresh() {
-      setError("");
-      try {
-        const u = await getCurrentUser();
-        setUser(u);
-        if (!u) {
-          setSessionType("NO SESSION");
-        } else if (u.email && u.email.endsWith('@mlshophelper.local')) {
-          setSessionType("PERSISTENT ANON USER");
-        } else {
-          setSessionType("REGISTERED USER");
-        }
-      } catch (e: any) {
-        setError(e.message || "Unknown error");
-        setUser(null);
-        setSessionType("");
-      }
-    }
+  //   async function refresh() {
+  //     setError("");
+  //     try {
+  //       const u = await getCurrentUser();
+  //       setUser(u);
+  //       if (!u) {
+  //         setSessionType("NO SESSION");
+  //       } else if (u.email && u.email.endsWith('@mlshophelper.local')) {
+  //         setSessionType("PERSISTENT ANON USER");
+  //       } else {
+  //         setSessionType("REGISTERED USER");
+  //       }
+  //     } catch (e: any) {
+  //       setError(e.message || "Unknown error");
+  //       setUser(null);
+  //       setSessionType("");
+  //     }
+  //   }
 
-    async function handleLogout() {
-      setError("");
-      try {
-        await logout();
-        await refresh();
-      } catch (e: any) {
-        setError(e.message || "Logout error");
-      }
-    }
+  //   async function handleLogout() {
+  //     setError("");
+  //     try {
+  //       await logout();
+  //       await refresh();
+  //     } catch (e: any) {
+  //       setError(e.message || "Logout error");
+  //     }
+  //   }
 
-    return (
-      <div style={{ margin: '14px 0', padding: 8, background: '#222', borderRadius: 8, color: '#ccc', fontSize: 13 }}>
-        <b>Debug Session Info</b>
-        <div>Session Type: <code>{sessionType}</code></div>
-        <div>User: <code>{user ? JSON.stringify(user) : 'null'}</code></div>
-        <button onClick={refresh} style={{ marginRight: 8 }}>Refresh</button>
-        <button onClick={handleLogout} style={{ marginRight: 8 }}>Logout</button>
-        {error && <div style={{ color: 'red' }}>{error}</div>}
-      </div>
-    );
-  }
+  //   return (
+  //     <div style={{ margin: '14px 0', padding: 8, background: '#222', borderRadius: 8, color: '#ccc', fontSize: 13 }}>
+  //       <b>Debug Session Info</b>
+  //       <div>Session Type: <code>{sessionType}</code></div>
+  //       <div>User: <code>{user ? JSON.stringify(user) : 'null'}</code></div>
+  //       <button onClick={refresh} style={{ marginRight: 8 }}>Refresh</button>
+  //       <button onClick={handleLogout} style={{ marginRight: 8 }}>Logout</button>
+  //       {error && <div style={{ color: 'red' }}>{error}</div>}
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className={styles.loginScreenRoot}>
@@ -140,7 +140,7 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           <img src={"/placeholder-sell.png"} alt="MLShopHelper logo" className={styles.logoIcon} />
           <span className={styles.loginTitle}>MLShopHelper</span>
         </div>
-        <DebugSessionInfo />
+        {/* <DebugSessionInfo /> */}
         <div className={styles.loginContentCenter}>
           <button
             className={styles.loginButton}
@@ -183,22 +183,22 @@ export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
           {showSecretPrompt && (
             <div className={styles.secretPrompt}>
               <b>Save your Login Key!</b>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0', wordBreak: 'break-all', background: '#181818', padding: 8, borderRadius: 6 }}>
+              <div style={{ wordBreak: 'break-all', background: '#181818', padding: 8, borderRadius: 6 }}>
                 <code style={{ userSelect: 'all', flex: 1 }}>{savedPersistentSecret}</code>
-                <button
-                  type="button"
-                  className={styles.loginButton}
-                  style={{ padding: '4px 10px', fontSize: 13 }}
-                  onClick={handleCopyLoginKey}
-                  tabIndex={0}
-                >
-                  Copy
-                </button>
-                {copySuccess && (
-                  <span style={{ color: '#5ffb7a', fontSize: 13, marginLeft: 4 }}>{copySuccess}</span>
-                )}
               </div>
-              <div style={{ color: '#ffb700', fontSize: 13, marginBottom: 6 }}>
+              <button
+                type="button"
+                className={styles.loginButton}
+                style={{ padding: '4px 10px', fontSize: 13, marginTop: 8 }}
+                onClick={handleCopyLoginKey}
+                tabIndex={0}
+              >
+                Copy
+              </button>
+              {copySuccess && (
+                <span style={{ color: '#5ffb7a', fontSize: 13, marginLeft: 4 }}>{copySuccess}</span>
+              )}
+              <div style={{ color: '#ffb700', fontSize: 13, marginBottom: 6, marginTop: 8 }}>
                 You need this key to log in again. <b>Save it somewhere safe!</b>
               </div>
               <button className={styles.loginButton} onClick={() => setShowSecretPrompt(false)}>

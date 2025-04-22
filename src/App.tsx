@@ -72,11 +72,14 @@ export default function App() {
     console.debug('[DEBUG] userId changed:', userId);
   }, [userId]);
   // Only fetch RxDB items if authenticated
-  const [items, itemsLoading] = useRxdbItems(!!loggedIn && dbReady);
+  const [items, ___] = useRxdbItems(!!loggedIn && dbReady);
 
   // --- RxDB price history live subscription ---
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
-  const [priceHistoryData, __] = useRxdbPriceHistory([priceHistory, setPriceHistory]);
+  const [priceHistoryData, __] = useRxdbPriceHistory(
+    !!loggedIn && dbReady, // authentication guard as first argument
+    [priceHistory, setPriceHistory] // external state as second argument
+  );
   const [saleWarning, setSaleWarning] = useState<{ open: boolean, itemId?: string, itemName?: string, price?: number, notes?: string } | null>(null);
 
   // --- Persistent User ID state ---
@@ -144,6 +147,13 @@ export default function App() {
       subscribeToAppwriteRealtimeForItems();
     }
   }, [dbReady]);
+
+  // --- Ensure itemStats are updated on app start and refresh ---
+  useEffect(() => {
+    if (loggedIn === true && dbReady) {
+      import('./rxdb').then(m => m.updateAllItemStats());
+    }
+  }, [loggedIn, dbReady, items]);
 
   const [search, setSearch] = useState("");
   // const [editing, setEditing] = useState<Item | null>(null);
@@ -290,24 +300,31 @@ export default function App() {
 
   // Move checkAuth outside useEffect so it can be called after login
   async function checkAuth() {
-    const persistentSecret = localStorage.getItem('persistentSecret');
-    const persistentUserId = localStorage.getItem('persistentUserId');
     try {
-      const user = await getCurrentUser();
-      if (user && persistentSecret && persistentUserId) {
+      const user = await getCurrentUser(); // returns null if not authenticated
+      if (user) {
         setLoggedIn(true);
-        setUserId(persistentUserId);
+        setUserId(user.$id);
+        // Ensure persistentUserId is set in both localStorage and state
+        let persistentUserId = localStorage.getItem('persistentUserId');
+        if (!persistentUserId || persistentUserId !== user.$id) {
+          localStorage.setItem('persistentUserId', user.$id);
+          persistentUserId = user.$id;
+        }
+        setPersistentUserId(persistentUserId);
       } else {
         setLoggedIn(false);
         setUserId(null);
+        setPersistentUserId(null);
       }
-    } catch (e) {
+    } catch {
       setLoggedIn(false);
       setUserId(null);
+      setPersistentUserId(null);
+      // Optionally clear zombie session/localStorage here
     }
   }
 
-  // Call checkAuth on mount
   useEffect(() => {
     checkAuth();
   }, []);
@@ -616,23 +633,26 @@ export default function App() {
     if (!result.destination || result.source.index === result.destination.index) return;
     const destination = result.destination;
     if (!selectedCharacter) return;
-    setCharacters(chars => chars.map(c => {
-      if (c.id !== selectedCharacter.id) return c;
-      const order = Array.from(c.shop.order);
-      const [removed] = order.splice(result.source.index, 1);
-      order.splice(destination.index, 0, removed);
-      // Persist to localStorage for dev/prod parity
-      const updated = { ...c, shop: { ...c.shop, order } };
-      localStorage.setItem('characters', JSON.stringify(
-        chars.map(cc => cc.id === c.id ? updated : cc)
-      ));
-      // If this character is selected, update selectedCharacter as well
-      if (selectedCharacter.id === c.id) {
-        localStorage.setItem('selectedCharacter', JSON.stringify(updated));
-        setSelectedCharacter(updated);
-      }
+    setCharacters(chars => {
+      const updated = chars.map(c => {
+        if (c.id !== selectedCharacter.id) return c;
+        const order = Array.from(c.shop.order);
+        const [removed] = order.splice(result.source.index, 1);
+        order.splice(destination.index, 0, removed);
+        // Persist to localStorage for dev/prod parity
+        const updated = { ...c, shop: { ...c.shop, order } };
+        localStorage.setItem('characters', JSON.stringify(
+          chars.map(cc => cc.id === c.id ? updated : cc)
+        ));
+        // If this character is selected, update selectedCharacter as well
+        if (selectedCharacter.id === c.id) {
+          localStorage.setItem('selectedCharacter', JSON.stringify(updated));
+          setSelectedCharacter(updated);
+        }
+        return updated;
+      });
       return updated;
-    }));
+    });
   }
 
   // function handleSort(col: 'name' | 'current_selling_price' | 'last_sold') {
@@ -741,12 +761,12 @@ export default function App() {
     // Still checking auth, render nothing or a loading spinner
     return null;
   }
-  if (loggedIn && !dbReady) {
-    return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading database…</div>;
-  }
-  if (itemsLoading) {
-    return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading items…</div>;
-  }
+  // if (loggedIn && !dbReady) {
+  //   return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading database…</div>;
+  // }
+  // if (itemsLoading) {
+  //   return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading items…</div>;
+  // }
   if (loggedIn === false) {
     return <LoginScreen onLogin={checkAuth} />;
   }

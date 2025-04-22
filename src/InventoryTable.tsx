@@ -13,6 +13,7 @@ import { getDb, updateAllItemStats } from './rxdb';
 import { MainItemTableContextMenu } from './MainItemTableContextMenu';
 import { deleteItem } from './api/items';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
+import { useRxdbItemStats } from './hooks/useRxdbItemStats';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface InventoryTableProps {
@@ -45,21 +46,21 @@ interface InventoryTableProps {
 const columnHelper = createColumnHelper<Item>();
 
 // Custom hook for itemStats with loading state
-function useRxdbItemStats() {
-  const [itemStats, setItemStats] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let sub: any;
-    getDb().then(db => {
-      sub = db.itemStats.find().$.subscribe(stats => {
-        setItemStats(stats);
-        setLoading(false);
-      });
-    });
-    return () => sub && sub.unsubscribe();
-  }, []);
-  return [itemStats, loading] as const;
-}
+// function useRxdbItemStats() {
+//   const [itemStats, setItemStats] = useState<any[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   useEffect(() => {
+//     let sub: any;
+//     getDb().then(db => {
+//       sub = db.itemStats.find().$.subscribe(stats => {
+//         setItemStats(stats);
+//         setLoading(false);
+//       });
+//     });
+//     return () => sub && sub.unsubscribe();
+//   }, []);
+//   return [itemStats, loading] as const;
+// }
 
 export default function InventoryTable({
   filteredItems,
@@ -112,9 +113,9 @@ export default function InventoryTable({
   }, [priceHistory]);
   const getRecentPrice = (itemId: string) => lastSoldMap.get(itemId) ?? undefined;
 
-  // Memoize stats lookup by itemId
+  // Memoize stats lookup by itemId (should use the same key as item $id)
   const statsMap = useMemo(
-    () => new Map((itemStats ?? []).map(stat => [stat.itemId, stat.toJSON ? stat.toJSON() : stat])),
+    () => new Map((itemStats ?? []).map(stat => [stat.itemId || stat.$id, stat.toJSON ? stat.toJSON() : stat])),
     [itemStats]
   );
 

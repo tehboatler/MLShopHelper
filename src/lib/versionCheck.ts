@@ -2,7 +2,7 @@ import { databases, client } from './appwrite';
 
 const DB_ID = import.meta.env.VITE_APPWRITE_DATABASE;
 const VERSION_COLLECTION_ID = import.meta.env.VITE_APPWRITE_VERSION_COLLECTION;
-const VERSION_DOC_ID = '68078b750037abc8f081'; // If you used a unique document ID, replace with actual ID; otherwise, use 'unique()' to fetch the only doc
+// const VERSION_DOC_ID = '68078b750037abc8f081'; // If you used a unique document ID, replace with actual ID; otherwise, use 'unique()' to fetch the only doc
 
 export async function fetchCurrentVersionFromAppwrite(): Promise<string> {
   // If you only have one doc, listDocuments and take the first

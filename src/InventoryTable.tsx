@@ -9,7 +9,7 @@ import {
   createColumnHelper,
   SortingState,
 } from '@tanstack/react-table';
-import { getDb, updateAllItemStats } from './rxdb';
+import {  updateAllItemStats } from './rxdb';
 import { MainItemTableContextMenu } from './MainItemTableContextMenu';
 import { deleteItem } from './api/items';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';

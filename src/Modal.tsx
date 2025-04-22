@@ -9,6 +9,7 @@ interface ModalProps {
   title?: string;
   noPadding?: boolean;
   alignTopLeft?: boolean;
+  compact?: boolean;
 }
 
 const getModalContentWidthStyles = ({ alignTopLeft, width }: { alignTopLeft: boolean; width?: number | string }) => {
@@ -22,7 +23,7 @@ const getModalContentWidthStyles = ({ alignTopLeft, width }: { alignTopLeft: boo
   };
 };
 
-export function Modal({ open, onClose, children, disableEsc = false, width, title, alignTopLeft = false }: ModalProps) {
+export function Modal({ open, onClose, children, disableEsc = false, width, title, alignTopLeft = false, compact = false }: ModalProps) {
   const [show, setShow] = useState(open);
   const [_, setAnimating] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -79,27 +80,24 @@ export function Modal({ open, onClose, children, disableEsc = false, width, titl
           padding: 0,
           minWidth: 0,
           maxWidth: '100vw',
-         
           position: 'relative',
           zIndex: 2000,
           display: 'flex',
-          alignItems: alignTopLeft ? 'flex-start' : 'center',
-          justifyContent: alignTopLeft ? 'flex-start' : 'center',
+          alignItems: compact ? 'flex-start' : (alignTopLeft ? 'flex-start' : 'center'),
+          justifyContent: 'center',
           width: '100%',
-          height: '100%',
+          ...(compact ? {} : { height: '100%' }),
         }}
         onClick={e => e.stopPropagation()}
       >
         <div
-          className={`modal-content${open ? " modal-content-in" : " modal-content-out"}`}
+          className={`modal-content global-modal${open ? " modal-content-in" : " modal-content-out"}`}
           ref={modalRef}
           tabIndex={-1}
           style={{
             outline: "none",
-            // Use a helper to compute width-related styles
             ...getModalContentWidthStyles({ alignTopLeft, width }),
-            minHeight: alignTopLeft ? '90vh' : '90vh',
-            maxHeight: alignTopLeft ? '90vh' : '90vh',
+            ...(compact ? {} : { minHeight: '90vh', maxHeight: '90vh' }),
             overflowY: alignTopLeft ? 'auto' : 'auto',
             overflowX: 'visible',
             overflow: undefined,

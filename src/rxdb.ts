@@ -265,9 +265,20 @@ export function subscribeToAppwriteRealtimeForItems() {
         if (doc) await doc.remove();
       } else if (events.some(e => e.endsWith('.create') || e.endsWith('.update'))) {
         // Document created/updated remotely: upsert into RxDB
-        // Ensure the id field is set
-        const item = { ...payload, id: payload.$id };
-        await db.items.upsert(item);
+        // Ensure the id field is set and sanitize Appwrite system fields
+        const { $id, name, price, owned, notes } = payload;
+        const item = {
+          id: $id,
+          name,
+          price,
+          owned,
+          notes
+        };
+        if (db.items && typeof db.items.upsert === 'function') {
+          await db.items.upsert(item);
+        } else {
+          console.error('[RxDB] db.items or db.items.upsert is undefined:', db.items);
+        }
       }
     });
   });

@@ -13,7 +13,7 @@ import { PriceHistoryModal } from "./PriceHistoryModal";
 import { SellModal } from "./SellModal";
 import { ItemNameAutocomplete } from "./ItemNameAutocomplete";
 // import { SectionHeader } from "./SectionHeader";
-import { StockDialog } from "./StockDialog";
+import { StockModal } from "./StockModal";
 import { ShopItemModal } from "./ShopItemModal";
 import { InventoryContextMenu } from "./InventoryContextMenu";
 import { InventoryPanel } from "./InventoryPanel";
@@ -47,10 +47,13 @@ import Ledger from "./Ledger";
 import AddEditItemModal from "./AddEditItemModal";
 import { useRxdbItems } from './hooks/useRxdbItems';
 import { addPriceHistoryEntry } from './api/priceHistory';
+import { addPriceHistoryEntryRX } from './priceHistoryRXDB';
 import { updateItem } from './api/items';
 import { debugAppwriteSession } from './debugAppwriteSession';
 import { subscribeToAppwriteRealtimeForItems } from './rxdb';
 import { closeDb, getDb } from './rxdb';
+import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
+import { SaleWarningModal } from "./SaleWarningModal";
 
 export default function App() {
   // --- All hooks and state declarations ---
@@ -60,6 +63,27 @@ export default function App() {
   const [dbReady, setDbReady] = useState(false);
   // Only fetch RxDB items if authenticated
   const [items, itemsLoading] = useRxdbItems(!!loggedIn && dbReady);
+
+  // --- RxDB price history live subscription ---
+  const [priceHistory, setPriceHistory] = useState<any[]>([]);
+  const [priceHistoryData, priceHistoryLoading] = useRxdbPriceHistory([priceHistory, setPriceHistory]);
+  const [saleWarning, setSaleWarning] = useState<{ open: boolean, itemId?: string, itemName?: string, price?: number, notes?: string } | null>(null);
+
+  // --- userPriceMap: always derived from RxDB live data ---
+  const userPriceMap = useMemo(() => {
+    if (!dbReady) return new Map();
+    const persistentUserId = localStorage.getItem('persistentUserId');
+    const map = new Map<string, PriceHistoryEntry>();
+    if (!persistentUserId) return map;
+    // Find latest entry per item for this user
+    priceHistory
+      .filter(e => e.author === persistentUserId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .forEach(entry => {
+        if (!map.has(entry.itemId)) map.set(entry.itemId, entry);
+      });
+    return map;
+  }, [dbReady, priceHistory]);
 
   useEffect(() => {
     console.log('[DEBUG] RxDB items:', items);
@@ -71,8 +95,10 @@ export default function App() {
   }, [items]);
 
   useEffect(() => {
-    subscribeToAppwriteRealtimeForItems();
-  }, []);
+    if (dbReady) {
+      subscribeToAppwriteRealtimeForItems();
+    }
+  }, [dbReady]);
 
   const [search, setSearch] = useState("");
   // const [editing, setEditing] = useState<Item | null>(null);
@@ -145,8 +171,6 @@ export default function App() {
   const [sellModalOpen, setSellModalOpen] = useState(false);
   const [sellItem, setSellItem] = useState<Item | null>(null);
   const [priceStats, setPriceStats] = useState<Record<string, { recent?: PriceHistoryEntry }>>({});
-  const [sortKey, setSortKey] = useState<'name' | 'current_selling_price' | 'last_sold'>('name');
-  const [sortAsc, setSortAsc] = useState(true);
   const [characters, setCharacters] = useState<Character[]>(() => {
     const saved = localStorage.getItem('characters');
     if (saved) {
@@ -171,26 +195,8 @@ export default function App() {
 
   const [inventoryContextMenu, setInventoryContextMenu] = useState<{ open: boolean, x: number, y: number, itemId?: string }>({ open: false, x: 0, y: 0 });
 
-  const [userPriceMap, setUserPriceMap] = useState<Map<string, PriceHistoryEntry>>(new Map());
-
   // Tab state for Inventory sidepanel
   const [inventoryTab, setInventoryTab] = useState<'inventory' | 'ledger'>('inventory');
-
-  // Fetch only the latest user price entry for each item for the "Your Price" cell
-  async function fetchUserPrices() {
-    const persistentUserId = localStorage.getItem('persistentUserId');
-    if (!persistentUserId || !items || items.length === 0) return;
-    try {
-      // Use new batch fetch function for efficiency
-      const map = await getLatestUserPriceEntriesBatchRX(persistentUserId);
-      console.log('[fetchUserPrices] map from getLatestUserPriceEntriesBatchRX:', map);
-      const userPriceMap = new Map(Object.entries(map));
-      console.log('[fetchUserPrices] userPriceMap after conversion:', userPriceMap);
-      setUserPriceMap(userPriceMap);
-    } catch (err) {
-      console.error('[fetchUserPrices] Error fetching latest user prices:', err);
-    }
-  }
 
   // Helper to get the last price entry for an item by the current user
   function getLastUserPriceEntry(priceHistory: PriceHistoryEntry[], userId: string): PriceHistoryEntry | undefined {
@@ -264,7 +270,6 @@ export default function App() {
   useEffect(() => {
     if (userId && items.length > 0) {
       refreshUserKarma();
-      fetchUserPrices();
     }
   }, [userId, items]);
 
@@ -376,13 +381,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, [loggedIn]);
 
-  // Ensure userPriceMap is populated on fresh load when items and dbReady are ready
-  useEffect(() => {
-    if (loggedIn && dbReady && items && items.length > 0) {
-      fetchUserPrices();
-    }
-  }, [loggedIn, dbReady, items]);
-
   // --- Friends Filtering State ---
   const [filterByFriends, setFilterByFriends] = useState(false);
   const [friendsWhitelist, setFriendsWhitelist] = useState<string[]>([]);
@@ -463,19 +461,22 @@ export default function App() {
 
   async function handleSell(item: Item, price: number) {
     const persistentUserId = localStorage.getItem('persistentUserId');
-    console.debug('[Sell] handleSell called with:', { item, price, persistentUserId });
     if (!persistentUserId) {
       console.warn('[Sell] persistentUserId missing; aborting sell.');
       return;
     }
-    // Pass itemName to handleChangePrice
-    await handleChangePrice(item.$id.toString(), price, undefined, true, item.name);
-    // fetchItems();
-    await fetchUserPrices(); // Ensure user price map is refreshed after sale
-    await refreshUserKarma(); // Ensure karma is refreshed after sale
+    // Check if user has already logged a sale for this item today
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const alreadyLogged = priceHistory.some(e => e.author === persistentUserId && e.itemId === item.$id && e.sold && e.date.slice(0, 10) === today);
+    if (!alreadyLogged) {
+      setSaleWarning({ open: true, itemId: item.$id, itemName: item.name, price });
+      return;
+    }
+    // If already logged, proceed without public log (isSale = false)
+    await handleChangePrice(item.$id.toString(), price, undefined, false, item.name);
+    refreshUserKarma();
   }
 
-  // Add itemName param and pass it into the price history entry
   async function handleChangePrice(itemId: string, newPrice: number, notes?: string, isSale?: boolean, itemName?: string) {
     const persistentUserId = localStorage.getItem('persistentUserId');
     // Fetch IGN for the user
@@ -506,34 +507,46 @@ export default function App() {
     console.debug('[Sell] priceHistoryEntry:', priceHistoryEntry);
     console.debug('[Sell] updateObj:', updateObj);
     try {
-      await addPriceHistoryEntry(priceHistoryEntry);
+      await addPriceHistoryEntry(priceHistoryEntry); // Remote (Appwrite)
+      // Only keep properties allowed by RxDB schema, and provide defaults as needed
+      const rxdbEntry = {
+        id: priceHistoryEntry.id,
+        itemId: priceHistoryEntry.itemId,
+        price: priceHistoryEntry.price,
+        date: priceHistoryEntry.date,
+        author: priceHistoryEntry.author,
+        author_ign: priceHistoryEntry.author_ign ?? null,
+        downvotes: [], // Always start as empty array for new entries
+        item_name: priceHistoryEntry.item_name ?? null,
+        sold: typeof priceHistoryEntry.sold === 'boolean' ? priceHistoryEntry.sold : false
+      };
+      await addPriceHistoryEntryRX(rxdbEntry); // Local RxDB for instant UI update
       await updateItem(itemId, updateObj);
       updateLocalAndStatePrice(itemId, newPrice);
+      // --- PATCH: Force refresh priceHistory state after local RXDB write ---
+      setPriceHistory(prev => [...prev, rxdbEntry]);
       showToast("Price updated and history recorded!");
-      if (priceHistoryModal.open && priceHistoryModal.itemId === itemId) {
-        // fetchAndSetPriceHistory(itemId);
-      }
     } catch (e) {
-      showToast("Failed to save price. Please try again.");
+      // Improved error logging for debugging
+      console.error("Error in handleChangePrice:", e);
+      if (e instanceof Error) {
+        showToast(`Failed to save price: ${e.message}`);
+      } else {
+        showToast("Failed to save price. Please try again.");
+      }
     }
   }
 
-  // async function fetchAndSetPriceHistory(itemId: string, authorIds?: string[]) {
-  //   // Always sync RXDB with Appwrite before fetching
-  //   await syncPriceHistoryToRxdb();
-  //   const entries = await getPriceHistory(itemId, authorIds);
-  //   setPriceHistory(entries.map((doc: PriceHistoryEntry) => ({
-  //     $id: doc.$id,
-  //     itemId: doc.itemId,
-  //     price: doc.price,
-  //     date: doc.date,
-  //     author: doc.author,
-  //     sold: doc.sold,
-  //     downvotes: doc.downvotes ?? [],
-  //     // Map both item_name (snake_case) and itemName (camelCase) to itemName for UI
-  //     itemName: doc.item_name || undefined,
-  //   })));
-  // }
+  async function confirmSaleWarning() {
+    if (!saleWarning?.itemId || !saleWarning.price) return;
+    await handleChangePrice(saleWarning.itemId, saleWarning.price, undefined, true, saleWarning.itemName);
+    refreshUserKarma();
+    setSaleWarning(null);
+  }
+
+  function cancelSaleWarning() {
+    setSaleWarning(null);
+  }
 
   function handleInventoryDragEnd(result: DropResult) {
     if (!result.destination || result.source.index === result.destination.index) return;
@@ -558,13 +571,13 @@ export default function App() {
     }));
   }
 
-  function handleSort(col: 'name' | 'current_selling_price' | 'last_sold') {
-    if (sortKey === col) setSortAsc(a => !a);
-    else {
-      setSortKey(col);
-      setSortAsc(true);
-    }
-  }
+  // function handleSort(col: 'name' | 'current_selling_price' | 'last_sold') {
+  //   if (sortKey === col) setSortAsc(a => !a);
+  //   else {
+  //     setSortKey(col);
+  //     setSortAsc(true);
+  //   }
+  // }
 
   const itemMap = Object.fromEntries(items.map(i => [i.$id, i]));
 
@@ -813,9 +826,6 @@ export default function App() {
               setModalOpen={() => dispatchModal({ type: 'OPEN_EDIT', item: null })}
               tableContainerRef={tableContainerRef}
               tableScrollTop={tableScrollTop}
-              sortKey={sortKey}
-              sortAsc={sortAsc}
-              handleSort={handleSort}
               itemMap={itemMap}
               selectedCharacter={selectedCharacter}
               userPriceMap={userPriceMap}
@@ -921,14 +931,55 @@ export default function App() {
           defaultPrice={sellItem?.current_selling_price}
         />
         {stockDialog.open && stockDialog.itemId && (
-          <StockDialog
+          <StockModal
             open={stockDialog.open}
             onClose={() => setStockDialog({ open: false, itemId: undefined })}
-            characters={characters}
-            itemName={itemMap[stockDialog.itemId ?? '']?.name ?? ''}
             itemId={stockDialog.itemId ?? ''}
-            defaultStock={selectedCharacter ? (selectedCharacter.shop.itemCounts[stockDialog.itemId ?? ''] ?? 0) : 0}
-            onStock={handleStock}
+            itemName={itemMap[stockDialog.itemId ?? '']?.name ?? ''}
+            userPriceMap={userPriceMap}
+            characters={characters}
+            selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
+            setToast={setToast}
+            priceHistoryData={priceHistoryData}
+            onAddToStore={(characterId, itemId, amount) => {
+              // Update characters state and localStorage
+              setCharacters(chars => {
+                const updated = chars.map(c => {
+                  if (c.id !== characterId) return c;
+                  const counts = { ...(c.shop.itemCounts || {}) };
+                  counts[itemId] = (counts[itemId] || 0) + amount;
+                  const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
+                  if (!order.includes(itemId)) order.push(itemId);
+                  return { ...c, shop: { itemCounts: counts, order } };
+                });
+                localStorage.setItem('characters', JSON.stringify(updated));
+                const updatedChar = updated.find(c => c.id === characterId);
+                if (updatedChar) setSelectedCharacter(updatedChar);
+                setToast({ msg: `${amount}x ${itemMap[itemId]?.name ?? ''} added to store for ${updatedChar?.name ?? ''}.`, visible: true });
+                return updated;
+              });
+              setStockDialog({ open: false, itemId: undefined });
+            }}
+            onSetStock={(characterId, itemId, amount) => {
+              // Update characters state and localStorage (set to specific amount)
+              setCharacters(chars => {
+                const updated = chars.map(c => {
+                  if (c.id !== characterId) return c;
+                  const counts = { ...(c.shop.itemCounts || {}) };
+                  counts[itemId] = amount;
+                  const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
+                  if (!order.includes(itemId)) order.push(itemId);
+                  return { ...c, shop: { itemCounts: counts, order } };
+                });
+                localStorage.setItem('characters', JSON.stringify(updated));
+                const updatedChar = updated.find(c => c.id === characterId);
+                if (updatedChar) setSelectedCharacter(updatedChar);
+                setToast({ msg: `Stock for ${itemMap[itemId]?.name ?? ''} set to ${amount} for ${updatedChar?.name ?? ''}.`, visible: true });
+                return updated;
+              });
+              setStockDialog({ open: false, itemId: undefined });
+            }}
+            handleChangePrice={handleChangePrice}
           />
         )}
         <ShopItemModal
@@ -950,6 +1001,14 @@ export default function App() {
             onRecordSale={handleRecordSale}
             onDelete={handleDeleteInventoryItem}
             deleteLabel="Remove from Store"
+          />
+        )}
+        {saleWarning?.open && (
+          <SaleWarningModal
+            open={saleWarning.open}
+            onConfirm={confirmSaleWarning}
+            onCancel={cancelSaleWarning}
+            itemName={saleWarning.itemName}
           />
         )}
         {/* TEMP: Button to debug Appwrite session */}

@@ -61,6 +61,37 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       onSelect={setSelectedCharacterId}
       onDelete={handleDeleteCharacter}
     />
+    {/* Total Sale Value Label */}
+    {selectedCharacter && selectedCharacter.shop && Array.isArray(selectedCharacter.shop.order) && selectedCharacter.shop.order.length > 0 && (
+      (() => {
+        let total = 0;
+        selectedCharacter.shop.order.forEach((itemId: string) => {
+          const item = itemMap[itemId];
+          if (!item) return;
+          const count = selectedCharacter.shop.itemCounts[itemId] || 0;
+          const safeCount = typeof count === 'number' && !isNaN(count) ? count : 0;
+          let price = 0;
+          try {
+            const localItems = JSON.parse(localStorage.getItem('localItems') || '[]');
+            const localItem = localItems.find((i: any) => i.$id === item.$id);
+            price = typeof localItem?.current_selling_price === 'number' ? localItem.current_selling_price : 0;
+          } catch {}
+          if (userPriceMap instanceof Map && userPriceMap.get(item.$id) && typeof userPriceMap.get(item.$id).price === 'number') {
+            price = userPriceMap.get(item.$id).price;
+          } else if (userPriceMap && typeof userPriceMap[item.$id]?.price === 'number') {
+            price = userPriceMap[item.$id].price;
+          } else if (!price && typeof item.current_selling_price === 'number') {
+            price = item.current_selling_price;
+          }
+          total += safeCount * price;
+        });
+        return (
+          <div style={{ color: '#e0c080', fontWeight: 700, fontSize: 16, margin: '2px 0 8px 0', letterSpacing: 0.2 }}>
+            Total Sale Value: {total.toLocaleString()} mesos
+          </div>
+        );
+      })()
+    )}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }} />
     <div
       className="inventory-scrollbar-hide"
@@ -81,11 +112,29 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           <DragDropContext onDragEnd={handleInventoryDragEnd}>
             <Droppable droppableId="shop-inventory" type="item">
               {(provided: DroppableProvided, _: DroppableStateSnapshot) => (
-                <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 40, paddingBottom: 200 }}>
+                <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'block', gap: 8, minHeight: 40, paddingBottom: 0 }}>
                   {selectedCharacter.shop.order.map((itemId: string, idx: number) => {
                     const item = itemMap[itemId];
                     if (!item) return null;
                     const count = selectedCharacter.shop.itemCounts[itemId] || 0;
+                    const safeCount = typeof count === 'number' && !isNaN(count) ? count : 0;
+                    // --- Always prefer userPriceMap (Map) if available, then local, then default ---
+                    let price = 0;
+                    let debugTooltip = '';
+                    try {
+                      const localItems = JSON.parse(localStorage.getItem('localItems') || '[]');
+                      const localItem = localItems.find((i: any) => i.$id === item.$id);
+                      debugTooltip = `local: ${localItem?.current_selling_price} | user: ${userPriceMap instanceof Map ? userPriceMap.get(item.$id)?.price : userPriceMap?.[item.$id]?.price} | default: ${item.current_selling_price}`;
+                      price = typeof localItem?.current_selling_price === 'number' ? localItem.current_selling_price : 0;
+                    } catch {}
+                    if (userPriceMap instanceof Map && userPriceMap.get(item.$id) && typeof userPriceMap.get(item.$id).price === 'number') {
+                      price = userPriceMap.get(item.$id).price;
+                    } else if (userPriceMap && typeof userPriceMap[item.$id]?.price === 'number') {
+                      price = userPriceMap[item.$id].price;
+                    } else if (!price && typeof item.current_selling_price === 'number') {
+                      price = item.current_selling_price;
+                    }
+                    const value = safeCount * price;
                     return (
                       <Draggable key={item.$id} draggableId={item.$id} index={idx}>
                         {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
@@ -96,31 +145,30 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'space-between',
-                              fontSize: 15,
-                              color: '#e0e0e0',
-                              padding: '7px 0',
-                              borderBottom: '1px solid #333',
-                              gap: 10,
-                              background: snapshot.isDragging ? '#2d8cff22' : undefined,
+                              gap: 8,
+                              background: snapshot.isDragging ? '#232323' : 'transparent',
+                              borderRadius: 8,
+                              boxShadow: snapshot.isDragging ? '0 2px 12px #0008' : undefined,
+                              border: snapshot.isDragging ? '1.5px solid #2d8cff' : undefined,
+                              padding: '7px 8px',
+                              marginBottom: 1,
                               cursor: 'grab',
-                              userSelect: 'none',
+                              transition: 'background 0.15s, box-shadow 0.15s, border 0.15s',
                               ...provided.draggableProps.style,
                             }}
-                            onClick={async () => {
-                              let priceStr = (() => {
-                                const userId = localStorage.getItem('persistentUserId') || '';
-                                const entry = getLastUserPriceEntry(item.priceHistory || [], userId);
-                                if (entry && typeof entry.price === 'number') return entry.price.toString();
-                                if (typeof item.current_selling_price === 'number') return item.current_selling_price.toString();
-                                return '';
-                              })();
-                              if (priceStr) {
-                                await navigator.clipboard.writeText(priceStr);
-                                setToast({ msg: `Copied price for ${item.name}`, visible: true });
+                            onClick={() => {
+                              if (typeof price === 'number' && price > 0) {
+                                navigator.clipboard.writeText(price.toString());
+                                setToast({ msg: `Copied price: ${price.toLocaleString()} mesos`, visible: true });
                                 if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
                                 toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
                               }
+                            }}
+                            onDoubleClick={() => {
+                              navigator.clipboard.writeText(item.name);
+                              setToast({ msg: `Copied ${item.name}`, visible: true });
+                              if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+                              toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
                             }}
                             onContextMenu={e => {
                               e.preventDefault();
@@ -129,15 +177,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                           >
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
                               <span style={{ fontWeight: 600, wordBreak: 'break-word', whiteSpace: 'normal', fontSize: 16, lineHeight: 1.18 }}>{item.name}</span>
-                              <span style={{ color: '#a88f4a', fontWeight: 500, fontSize: 13, marginTop: 2 }}>
-                                {(() => {
-                                  // Always use the latest value from localStorage if present
-                                  let localItems: any[] = [];
-                                  try { localItems = JSON.parse(localStorage.getItem('localItems') || '[]'); } catch {}
-                                  const localItem = localItems.find(i => i.$id === item.$id);
-                                  const price = localItem?.current_selling_price ?? (userPriceMap?.[item.$id]?.price ?? item.current_selling_price);
-                                  return price ? `${price.toLocaleString()} mesos` : '';
-                                })()}
+                              <span style={{ color: '#a88f4a', fontWeight: 500, fontSize: 13, marginTop: 2, whiteSpace: 'pre-line' }} title={debugTooltip}>
+                                {typeof price === 'number' && price > 0
+                                  ? `${price.toLocaleString()} mesos${safeCount > 0 ? `\n(${(safeCount*price).toLocaleString()} total)` : ''}`
+                                  : <span style={{color:'#e74c3c'}}>No price</span>}
                               </span>
                             </div>
                             <span
@@ -164,7 +207,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                 handleOpenStockDialog(item.$id);
                               }}
                               title="Adjust stock"
-                            >{count}x</span>
+                            >{safeCount}x</span>
                           </div>
                         )}
                       </Draggable>
@@ -174,6 +217,17 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                     <div style={{ color: '#888', fontSize: 15, marginTop: 4, marginBottom: 6 }}>No items</div>
                   )}
                   {provided.placeholder}
+                  {/* Non-draggable, non-droppable spacer item for bottom padding (visible for testing) */}
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      height: 200,
+                      // background: 'rgba(46,204,113,0.25)', // light green for visibility
+                      // border: '1px dashed #27ae60',
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                    }}
+                  />
                 </div>
               )}
             </Droppable>

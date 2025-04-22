@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { Item, PriceHistoryEntry } from "./types";
 import { daysAgo } from "./utils";
 import {
@@ -7,11 +7,13 @@ import {
   getSortedRowModel,
   flexRender,
   createColumnHelper,
+  SortingState,
 } from '@tanstack/react-table';
 import { getDb, updateAllItemStats } from './rxdb';
 import { MainItemTableContextMenu } from './MainItemTableContextMenu';
 import { deleteItem } from './api/items';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 interface InventoryTableProps {
   filteredItems: Item[];
@@ -20,9 +22,6 @@ interface InventoryTableProps {
   setModalOpen: (v: boolean) => void;
   tableContainerRef: React.RefObject<HTMLDivElement>;
   tableScrollTop: number;
-  sortKey: string;
-  sortAsc: boolean;
-  handleSort: (col: 'name' | 'current_selling_price' | 'last_sold') => void;
   itemMap: Record<string, Item>;
   selectedCharacter: any;
   userPriceMap: Map<string, any>;
@@ -68,22 +67,15 @@ export default function InventoryTable({
   setSearch,
   setModalOpen,
   tableContainerRef,
-  // tableScrollTop,
-  sortKey,
-  sortAsc,
-  handleSort,
-  // itemMap,
-  // selectedCharacter,
   userPriceMap,
   priceStats,
   handleInventoryContextMenu,
-  // highlightedRow,
   handleOpenStockDialog,
   setSellItem,
   setSellModalOpen,
   openHistoryModal,
-  // filterByFriends,
-  // friendsWhitelist
+  filterByFriends,
+  friendsWhitelist
 }: InventoryTableProps) {
   // Defensive: filter out undefined items into a local variable
   const validItems = useMemo(() => {
@@ -106,8 +98,19 @@ export default function InventoryTable({
     }
   }, [validItems, priceHistory, priceHistoryLoading]);
 
-  // Fix priceStats typing for indexed access
-  const getRecentPrice = (itemId: string) => priceStats[itemId]?.recent;
+  // Compute most recent sold entry reactively from live priceHistory
+  const lastSoldMap = useMemo(() => {
+    const map = new Map<string, PriceHistoryEntry>();
+    for (const entry of priceHistory) {
+      if (entry.sold) {
+        if (!map.has(entry.itemId) || new Date(entry.date) > new Date(map.get(entry.itemId)!.date)) {
+          map.set(entry.itemId, entry);
+        }
+      }
+    }
+    return map;
+  }, [priceHistory]);
+  const getRecentPrice = (itemId: string) => lastSoldMap.get(itemId) ?? undefined;
 
   // Memoize stats lookup by itemId
   const statsMap = useMemo(
@@ -136,8 +139,12 @@ export default function InventoryTable({
     console.log('[InventoryTable] Item IDs missing in statsMap:', missing);
   }, [validItems, statsMap]);
 
+  // --- Sorting state for TanStack Table ---
+  const [sorting, setSorting] = useState<SortingState>([]);
+
   // Define columns using TanStack Table
   const columns = useMemo(() => [
+    // Stock button column (always left-most)
     columnHelper.display({
       id: 'stock',
       header: () => 'Stock',
@@ -160,23 +167,42 @@ export default function InventoryTable({
         >Stock</button>
       ),
       size: 80,
+      enableSorting: false, // No sorting for stock button
     }),
+    // Name column (second, takes at least 50% of table width)
     columnHelper.accessor('name', {
-      header: () => (
-        <span style={{ cursor: 'pointer' }} onClick={() => handleSort('name')}>
-          Name {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}
+      header: ({ column }) => (
+        <span
+          style={{ cursor: 'pointer', userSelect: 'none', width: '50%', minWidth: '50%', display: 'inline-block' }}
+          onClick={column.getToggleSortingHandler()}
+        >
+          Name {column.getIsSorted() === 'asc' ? '▲' : column.getIsSorted() === 'desc' ? '▼' : ''}
         </span>
       ),
-      cell: info => info.getValue(),
-      size: 200,
+      enableSorting: true,
+      cell: info => (
+        <span style={{ width: '100%', minWidth: '50%', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.getValue()}</span>
+      ),
+      size: undefined, // Let flex grow handle width
+      minSize: undefined,
+      maxSize: undefined,
+      meta: { style: { width: '50%', minWidth: '50%' } },
     }),
-    columnHelper.display({
+    // Your Price column (sortable)
+    columnHelper.accessor(row => {
+      const entry = userPriceMap.get(row.$id);
+      return entry && typeof entry.price === 'number' ? entry.price : null;
+    }, {
       id: 'current_selling_price',
-      header: () => (
-        <span style={{ cursor: 'pointer' }} onClick={() => handleSort('current_selling_price')}>
-          Your Price {sortKey === 'current_selling_price' ? (sortAsc ? '▲' : '▼') : ''}
+      header: ({ column }) => (
+        <span
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={column.getToggleSortingHandler()}
+        >
+          Your Price {column.getIsSorted() === 'asc' ? '▲' : column.getIsSorted() === 'desc' ? '▼' : ''}
         </span>
       ),
+      enableSorting: true,
       cell: info => {
         const entry = userPriceMap.get(info.row.original.$id);
         return entry && typeof entry.price === 'number'
@@ -184,14 +210,30 @@ export default function InventoryTable({
           : <span style={{color:'#888'}}>No price set</span>;
       },
       size: 120,
+      sortingFn: (a, b) => {
+        const aVal = userPriceMap.get(a.original.$id)?.price;
+        const bVal = userPriceMap.get(b.original.$id)?.price;
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return -1;
+        if (bVal == null) return 1;
+        return aVal - bVal;
+      },
     }),
-    columnHelper.display({
+    // Median Price column (sortable)
+    columnHelper.accessor(row => {
+      const stats = statsMap.get(row.$id);
+      return stats?.median ?? null;
+    }, {
       id: 'median_price',
-      header: () => (
-        <span style={{ cursor: 'pointer' }}>
-          Median Price
+      header: ({ column }) => (
+        <span
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={column.getToggleSortingHandler()}
+        >
+          Median Price {column.getIsSorted() === 'asc' ? '▲' : column.getIsSorted() === 'desc' ? '▼' : ''}
         </span>
       ),
+      enableSorting: true,
       cell: info => {
         const stats = statsMap.get(info.row.original.$id);
         const median = stats?.median;
@@ -200,54 +242,69 @@ export default function InventoryTable({
           : <span style={{color:'#888'}}>–</span>;
       },
       size: 120,
+      sortingFn: (a, b) => {
+        const aVal = statsMap.get(a.original.$id)?.median;
+        const bVal = statsMap.get(b.original.$id)?.median;
+        if (aVal == null && bVal == null) return 0;
+        if (aVal == null) return -1;
+        if (bVal == null) return 1;
+        return aVal - bVal;
+      },
     }),
-    columnHelper.display({
+    // Last Sold column (sortable)
+    columnHelper.accessor(row => {
+      const recent = getRecentPrice(row.$id);
+      return recent?.date ?? null;
+    }, {
       id: 'last_sold',
-      header: () => (
-        <span style={{ cursor: 'pointer' }} onClick={() => handleSort('last_sold')}>
-          Last Sold {sortKey === 'last_sold' ? (sortAsc ? '▲' : '▼') : ''}
+      header: ({ column }) => (
+        <span
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={column.getToggleSortingHandler()}
+        >
+          Last Sold {column.getIsSorted() === 'asc' ? '▲' : column.getIsSorted() === 'desc' ? '▼' : ''}
         </span>
       ),
+      enableSorting: true,
       cell: info => daysAgo(getRecentPrice(info.row.original.$id)?.date),
       size: 120,
+      sortingFn: (a, b) => {
+        const aDate = getRecentPrice(a.original.$id)?.date;
+        const bDate = getRecentPrice(b.original.$id)?.date;
+        if (!aDate && !bDate) return 0;
+        if (!aDate) return -1;
+        if (!bDate) return 1;
+        return new Date(aDate).getTime() - new Date(bDate).getTime();
+      },
     }),
-    columnHelper.display({
-      id: 'actions',
-      header: () => '',
-      cell: info => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', width: '100%' }}>
-          <button
-            style={{ background: '#4caf50', color: '#888888', fontWeight: 600, border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}
-            onClick={e => { e.stopPropagation(); setSellItem(info.row.original); setSellModalOpen(true); }}
-            aria-label="Sell"
-          >
-            <img src="/placeholder-sell.png" alt="Sell" style={{ width: 24, height: 24, objectFit: 'contain' }} />
-          </button>
-        </div>
-      ),
-      size: 80,
-    }),
-  ], [handleOpenStockDialog, handleSort, priceStats, setSellItem, setSellModalOpen, sortAsc, sortKey, userPriceMap]);
+  ], [handleOpenStockDialog, priceStats, userPriceMap, statsMap, getRecentPrice]);
 
   const table = useReactTable({
     data: validItems,
     columns,
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    manualSorting: true, // sorting handled externally
-    state: {
-      sorting: [{ id: sortKey, desc: !sortAsc }],
-    },
+    manualSorting: false, // sorting handled internally
   });
 
-  // For type-safe percentile/avg keys
-  // const statKeys = ['p25', 'p50', 'p75', 'avg'] as const;
-  // type StatKey = typeof statKeys[number];
+  // --- Virtualizer setup for infinite scroll ---
+  const parentRef = tableContainerRef;
+  const rowVirtualizer = useVirtualizer({
+    count: table.getRowModel().rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 54, // Approximate row height
+    overscan: 8,
+  });
 
-  // Limit visible items to 7 for performance, unless searching
-  const visibleRows = search.trim().length > 0
-    ? table.getRowModel().rows
-    : table.getRowModel().rows.slice(0, 7);
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+
+  // Only render visible rows, but keep table layout
+  const visibleRows = virtualRows.map(vr => table.getRowModel().rows[vr.index]);
 
   // Context menu state for main item table
   const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; itemId: string | null }>({ open: false, x: 0, y: 0, itemId: null });
@@ -276,6 +333,97 @@ export default function InventoryTable({
     setContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
   };
 
+  // Reference for the search input
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus search bar on Enter (when no modal is open)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const modalOpen = !!document.querySelector('.global-modal');
+      if (
+        e.key === 'Enter' &&
+        !modalOpen &&
+        searchInputRef.current &&
+        document.activeElement !== searchInputRef.current
+      ) {
+        e.preventDefault();
+        setSearch(""); // Clear the input when focusing
+        searchInputRef.current.focus();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setSearch]);
+
+  // Keyboard navigation state
+  const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
+
+  // Arrow key navigation (up/down)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const modalOpen = !!document.querySelector('.global-modal');
+      const active = document.activeElement as HTMLElement | null;
+      // D: Open price history modal for selected item
+      if (
+        e.key === 'd' &&
+        !modalOpen &&
+        selectedRowIdx != null &&
+        visibleRows[selectedRowIdx]
+      ) {
+        e.preventDefault();
+        openHistoryModal(visibleRows[selectedRowIdx].original);
+        return;
+      }
+      // S: Open stock modal for selected item
+      if (
+        e.key === 's' &&
+        !modalOpen &&
+        selectedRowIdx != null &&
+        visibleRows[selectedRowIdx]
+      ) {
+        e.preventDefault();
+        handleOpenStockDialog(visibleRows[selectedRowIdx].original.$id);
+        return;
+      }
+      // If search bar is focused and arrow up/down pressed, blur and allow navigation
+      if (
+        (e.key === 'ArrowDown' || e.key === 'ArrowUp') &&
+        active &&
+        active === searchInputRef.current &&
+        !modalOpen
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.blur();
+        setSelectedRowIdx(0); // Always start at the first item
+        return;
+      }
+      if (
+        (e.key === 'ArrowDown' || e.key === 'ArrowUp') &&
+        !modalOpen &&
+        active?.tagName !== 'INPUT' &&
+        active?.tagName !== 'TEXTAREA'
+      ) {
+        e.preventDefault();
+        setSelectedRowIdx(prev => {
+          const maxIdx = visibleRows.length - 1;
+          if (prev == null) return e.key === 'ArrowDown' ? 0 : maxIdx;
+          if (e.key === 'ArrowDown') return Math.min(prev + 1, maxIdx);
+          if (e.key === 'ArrowUp') return Math.max(prev - 1, 0);
+          return prev;
+        });
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [visibleRows, selectedRowIdx]);
+
+  // Scroll selected row into view
+  useEffect(() => {
+    if (selectedRowIdx != null && rowVirtualizer && rowVirtualizer.scrollToIndex) {
+      rowVirtualizer.scrollToIndex(selectedRowIdx);
+    }
+  }, [selectedRowIdx, rowVirtualizer]);
+
   // Show loading if itemStats or priceHistory are not ready
   if (itemStatsLoading || priceHistoryLoading) {
     return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading stats…</div>;
@@ -285,6 +433,7 @@ export default function InventoryTable({
     <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 }}>
       <div className="search-row">
         <input
+          ref={searchInputRef}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search items..."
@@ -293,23 +442,31 @@ export default function InventoryTable({
         <button className="add-btn" onClick={() => setModalOpen(true)}>Add Item</button>
       </div>
       <div
-        className="table-responsive sticky-table"
         ref={tableContainerRef}
         style={{
-          maxHeight: 'calc(100vh - 170px)',
-          height: '100%',
-          overflowY: 'auto',
-          overflowX: 'auto',
+          width: '100%',
+          height: 'calc(100vh - 148px)',
+          overflow: 'hidden',
           position: 'relative',
-          background: 'transparent',
+          background: '#181818',
+          borderRadius: 12,
+          boxShadow: '0 2px 12px #0002',
+          marginBottom: 0,
         }}
       >
-        <table className="styled-table sticky-table" style={{ width: '100%', tableLayout: 'fixed' }}>
+        <table className="styled-table" style={{ width: '100%', minWidth: 600, tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: 80 }} /> {/* Stock */}
+            <col style={{ width: '50%' }} /> {/* Name (50% of table) */}
+            <col style={{ width: '10%' }} /> {/* Your Price */}
+            <col style={{ width: '10%' }} /> {/* Median Price */}
+            <col style={{ width: '10%' }} /> {/* Last Sold */}
+          </colgroup>
           <thead>
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map(header => (
-                  <th key={header.id} style={{ width: header.getSize() }}>
+                  <th key={header.id} onClick={header.column.getToggleSortingHandler()} style={{ cursor: header.column.getCanSort() ? 'pointer' : undefined, userSelect: 'none' }}>
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -317,6 +474,12 @@ export default function InventoryTable({
             ))}
           </thead>
           <tbody>
+            {/* Spacer row before visible rows */}
+            {virtualRows.length > 0 && (
+              <tr style={{ height: virtualRows[0].start }}>
+                <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent' }} />
+              </tr>
+            )}
             {visibleRows.map((row, i) => (
               <React.Fragment key={row.id}>
                 <tr
@@ -336,7 +499,8 @@ export default function InventoryTable({
                   onContextMenu={e => handleMainTableContextMenu(e, row.original.$id)}
                   style={{
                     cursor: 'pointer',
-                    background: i % 2 === 1 ? '#292929' : "#202020",
+                    background:
+                      selectedRowIdx === i ? '#3a3a3a' : (virtualRows[i]?.index ?? 0) % 2 === 1 ? '#292929' : '#202020',
                     transition: 'background 0.3s',
                   }}
                 >
@@ -353,18 +517,18 @@ export default function InventoryTable({
                 </tr>
                 {/* Sub-section for percentiles and avg price */}
                 <tr>
-                  <td colSpan={columns.length} style={{ padding: 0, background: i % 2 === 1 ? '#292929' : "#202020", borderTop: 'none' }}>
+                  <td colSpan={columns.length} style={{ padding: 0, background: (virtualRows[i]?.index ?? 0) % 2 === 1 ? '#292929' : "#202020", borderTop: 'none' }}>
                     <div
                       className="compact subrow-bar"
                       style={{
-                        width: '66%',
+                        width: '100%',
                         margin: '0',
                         display: 'flex',
-                        justifyContent: 'flex-start',
+                        justifyContent: 'flex-end',
                         alignItems: 'flex-start',
                         fontSize: '11px',
                         color: '#bbb',
-                        padding: '2px 8px',
+                        padding: '2px 0 2px 8px',
                         borderRadius: 0,
                         minHeight: 0,
                       }}
@@ -378,7 +542,7 @@ export default function InventoryTable({
                             <span style={{ marginRight: 12 }}>P25: {format(stats?.p25)}</span>
                             <span style={{ marginRight: 12 }}>Median: {format(stats?.median)}</span>
                             <span style={{ marginRight: 12 }}>Avg: {format(stats?.avg)}</span>
-                            <span>P75: {format(stats?.p75)}</span>
+                            <span style={{ marginRight: 24 }}>P75: {format(stats?.p75)}</span>
                           </>
                         );
                       })()}
@@ -387,10 +551,12 @@ export default function InventoryTable({
                 </tr>
               </React.Fragment>
             ))}
-            {/* Spacer row for extra bottom space */}
-            <tr>
-              <td colSpan={columns.length} style={{ height: 160, border: 'none', background: 'transparent', pointerEvents: 'none' }} />
-            </tr>
+            {/* Spacer row after visible rows */}
+            {virtualRows.length > 0 && (
+              <tr style={{ height: totalSize - (virtualRows[virtualRows.length-1]?.end ?? 0) }}>
+                <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent' }} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -596,3 +596,11 @@ input:focus, button:focus {
     background-color: #0f0f0f69;
   }
 }
+
+/* Prevent all text selection in the app */
+html, body, #root, .App, * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -ms-user-select: none !important;
+  -moz-user-select: none !important;
+}

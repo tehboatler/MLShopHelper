@@ -124,3 +124,17 @@ export async function getLatestSoldEntriesBatchRX(userId: string) {
   }
   return latestSoldMap;
 }
+
+// Returns the latest PriceHistoryEntry for the given user and item
+export async function getLatestUserPriceEntryRX(userId: string, itemId: string) {
+  const db = await getDb();
+  const docs = await db.priceHistory.find({
+    selector: { author: userId, itemId },
+    sort: [{ date: 'desc' }],
+    limit: 1
+  }).exec();
+  if (docs && docs.length > 0) {
+    return docs[0].toJSON ? docs[0].toJSON() : docs[0];
+  }
+  return null;
+}

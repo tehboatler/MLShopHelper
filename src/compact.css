@@ -252,3 +252,21 @@
 }
 
 /* Removed .ledger-list-row-sold as row highlight is now used instead */
+
+/* Force modal content to shrink to fit its content */
+.modal-content-compact {
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  display: block !important;
+  align-items: unset !important;
+  justify-content: unset !important;
+}
+
+/* If your modal uses a .modal-content or similar class inside, you may need to also target it: */
+.modal-content-compact .modal-content {
+  height: auto !important;
+  min-height: unset !important;
+  max-height: unset !important;
+  display: block !important;
+}

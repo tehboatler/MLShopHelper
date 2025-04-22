@@ -34,10 +34,10 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   setToast,
   toastTimeoutRef,
   setInventoryContextMenu,
-  getLastUserPriceEntry,
+  // getLastUserPriceEntry,
   selectedCharacter,
   handleOpenStockDialog,
-  onRemoveFromStore,
+  // onRemoveFromStore,
   onItemSelected,
 }) => (
     <aside
@@ -138,7 +138,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                       } else if (!price && typeof item.current_selling_price === 'number') {
                         price = item.current_selling_price;
                       }
-                      const value = safeCount * price;
+                      // const value = safeCount * price;
                       return (
                         <Draggable key={item.$id} draggableId={item.$id} index={idx}>
                           {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (

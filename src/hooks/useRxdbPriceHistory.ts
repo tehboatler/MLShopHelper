@@ -17,7 +17,7 @@ export function useRxdbPriceHistory(
         setLoading(false);
         // Debug: log every emission to verify RxDB triggers after price change
         const allDocs = docs.map(doc => doc.toJSON());
-        const itemIds = allDocs.map(d => d.itemId);
+        // const itemIds = allDocs.map(d => d.itemId);
         const prices = allDocs.map(d => ({ itemId: d.itemId, price: d.price, author: d.author, date: d.date }));
         console.log('[useRxdbPriceHistory] Emitted docs:', prices);
       });

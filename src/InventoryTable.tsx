@@ -69,13 +69,13 @@ export default function InventoryTable({
   tableContainerRef,
   userPriceMap,
   priceStats,
-  handleInventoryContextMenu,
+  // handleInventoryContextMenu,
   handleOpenStockDialog,
-  setSellItem,
-  setSellModalOpen,
+  // setSellItem,
+  // setSellModalOpen,
   openHistoryModal,
-  filterByFriends,
-  friendsWhitelist
+  // filterByFriends,
+  // friendsWhitelist
 }: InventoryTableProps) {
   // Defensive: filter out undefined items into a local variable
   const validItems = useMemo(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect} from "react";
 import type { Character } from "./types";
 import { ChangePriceModal } from "./ChangePriceModal";
 import { getLatestUserPriceEntryRX } from './priceHistoryRXDB';
@@ -31,9 +31,9 @@ export function StockModal({
   setToast,
   onAddToStore,
   onRemoveFromStore,
-  onSetStock,
+  // onSetStock,
   handleChangePrice,
-  priceHistoryData, // Add this prop
+  // priceHistoryData, // Add this prop
 }: StockModalProps) {
   // Default to selected character or first
   const [characterId, setCharacterId] = useState<string>(selectedCharacterId || characters[0]?.id || "");
@@ -43,7 +43,7 @@ export function StockModal({
   const [alreadyLogged24h, setAlreadyLogged24h] = useState(false);
   const [showSaleWarning, setShowSaleWarning] = useState(false);
   const persistentUserId = typeof window !== 'undefined' ? localStorage.getItem('persistentUserId') : null;
-  const today = new Date().toISOString().slice(0, 10);
+  // const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     setCharacterId(selectedCharacterId || characters[0]?.id || "");

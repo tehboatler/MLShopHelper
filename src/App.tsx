@@ -48,7 +48,7 @@ import { useRxdbItems } from './hooks/useRxdbItems';
 import { addPriceHistoryEntry } from './api/priceHistory';
 import { addPriceHistoryEntryRX } from './priceHistoryRXDB';
 import { updateItem } from './api/items';
-import { debugAppwriteSession } from './debugAppwriteSession';
+// import { debugAppwriteSession } from './debugAppwriteSession';
 import { subscribeToAppwriteRealtimeForItems } from './rxdb';
 import { closeDb, getDb } from './rxdb';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';

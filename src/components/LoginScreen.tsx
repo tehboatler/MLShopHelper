@@ -5,7 +5,7 @@ import TitleBar from '../TitleBar';
 import { getCurrentUser, logout } from '../api/auth';
 
 export default function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const [userId, setUserId] = useState("");
+  const [_, setUserId] = useState("");
   const [persistentSecret, setPersistentSecret] = useState("");
   const [showSecretPrompt, setShowSecretPrompt] = useState(false);
   const [savedPersistentSecret, setSavedPersistentSecret] = useState("");

@@ -54,6 +54,7 @@ import { closeDb, getDb } from './rxdb';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 import { SaleWarningModal } from "./SaleWarningModal";
 import { addItem } from './api/items';
+import VersionGatekeeper from './VersionGatekeeper';
 
 export default function App() {
   // --- All hooks and state declarations ---
@@ -799,333 +800,336 @@ export default function App() {
   }
 
   return (
-    <UISettingsContext.Provider value={{ round50k, showUnsold, setRound50k, setShowUnsold, compactMode, setCompactMode }}>
-      <TitleBar />
-      <Toolbar
-        onSetIGN={() => dispatchModal({ type: 'OPEN_IGN' })}
-        onAbout={() => dispatchModal({ type: 'OPEN_ABOUT' })}
-        ign={ign}
-        compactMode={compactMode}
-        setCompactMode={setCompactMode}
-        userKarma={userKarma}
-        filterByFriends={filterByFriends}
-        setFilterByFriends={setFilterByFriends}
-      />
-      {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
-      <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 0 }}>
-        {addCharacterPrompt && (
-          <div style={{
-            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-            background: 'rgba(0,0,0,0.88)', color: '#fff', zIndex: 4000,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <h2 style={{ marginBottom: 24 }}>No characters found</h2>
-            <button style={{ fontSize: 18, padding: '12px 32px', borderRadius: 10, background: '#2d8cff', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }} onClick={handleAddCharacter}>
-              Add Character
-            </button>
-          </div>
-        )}
-        <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', minHeight: 0 }}>
-          {/* Inventory Sidepanel with Tabs */}
-          <aside className="inventory-panel-scroll" style={{
-            width: 303,
-            minWidth: 230,
-            maxWidth: 340,
-            background: '#232323',
-            borderRight: '1.5px solid #333',
-            padding: 0,
-            overflow: 'hidden', // revert to hidden to avoid overhang
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 0,
-            boxSizing: 'border-box',
-            position: 'relative',
-          }}>
-            {/* Tab Buttons */}
+    <>
+      <VersionGatekeeper />
+      <UISettingsContext.Provider value={{ round50k, showUnsold, setRound50k, setShowUnsold, compactMode, setCompactMode }}>
+        <TitleBar />
+        <Toolbar
+          onSetIGN={() => dispatchModal({ type: 'OPEN_IGN' })}
+          onAbout={() => dispatchModal({ type: 'OPEN_ABOUT' })}
+          ign={ign}
+          compactMode={compactMode}
+          setCompactMode={setCompactMode}
+          userKarma={userKarma}
+          filterByFriends={filterByFriends}
+          setFilterByFriends={setFilterByFriends}
+        />
+        {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
+        <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 0 }}>
+          {addCharacterPrompt && (
             <div style={{
-              display: 'flex',
-              borderBottom: '1px solid #333',
-              background: '#232323',
-              width: '100%',
-              boxSizing: 'border-box',
-              margin: 0,
-              padding: 0,
-              position: 'relative',
-              zIndex: 2,
-              overflow: 'hidden', // revert to hidden to avoid overhang
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(0,0,0,0.88)', color: '#fff', zIndex: 4000,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             }}>
-              <button
-                style={{
-                  flex: 1,
-                  padding: '12px 0 10px 0',
-                  background: inventoryTab === 'inventory' ? '#181818' : 'transparent',
-                  color: inventoryTab === 'inventory' ? '#fff' : '#aaa',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  border: 'none',
-                  borderBottom: inventoryTab === 'inventory' ? '2px solid #2d8cff' : 'none',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'background .15s, color .15s',
-                  width: '100%',
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                  margin: 0,
-                  borderRadius: 0,
-                  overflow: 'hidden', // revert to hidden to avoid overhang
-                }}
-                onClick={() => setInventoryTab('inventory')}
-              >Inventory</button>
-              <button
-                style={{
-                  flex: 1,
-                  padding: '12px 0 10px 0',
-                  background: inventoryTab === 'ledger' ? '#181818' : 'transparent',
-                  color: inventoryTab === 'ledger' ? '#fff' : '#aaa',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  border: 'none',
-                  borderBottom: inventoryTab === 'ledger' ? '2px solid #2d8cff' : 'none',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'background .15s, color .15s',
-                  width: '100%',
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                  margin: 0,
-                  borderRadius: 0,
-                  overflow: 'hidden', // revert to hidden to avoid overhang
-                }}
-                onClick={() => setInventoryTab('ledger')}
-              >Ledger</button>
+              <h2 style={{ marginBottom: 24 }}>No characters found</h2>
+              <button style={{ fontSize: 18, padding: '12px 32px', borderRadius: 10, background: '#2d8cff', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }} onClick={handleAddCharacter}>
+                Add Character
+              </button>
             </div>
-            {/* Tab Content */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-              {inventoryTab === 'inventory' && (
-                <InventoryPanel
-                  characters={characters}
-                  selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
-                  setSelectedCharacterId={id => {
-                    const found = characters.find(c => c.id === id) || null;
-                    setSelectedCharacter(found);
-                    localStorage.setItem('selectedCharacter', JSON.stringify(found));
+          )}
+          <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', minHeight: 0 }}>
+            {/* Inventory Sidepanel with Tabs */}
+            <aside className="inventory-panel-scroll" style={{
+              width: 303,
+              minWidth: 230,
+              maxWidth: 340,
+              background: '#232323',
+              borderRight: '1.5px solid #333',
+              padding: 0,
+              overflow: 'hidden', // revert to hidden to avoid overhang
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0,
+              boxSizing: 'border-box',
+              position: 'relative',
+            }}>
+              {/* Tab Buttons */}
+              <div style={{
+                display: 'flex',
+                borderBottom: '1px solid #333',
+                background: '#232323',
+                width: '100%',
+                boxSizing: 'border-box',
+                margin: 0,
+                padding: 0,
+                position: 'relative',
+                zIndex: 2,
+                overflow: 'hidden', // revert to hidden to avoid overhang
+              }}>
+                <button
+                  style={{
+                    flex: 1,
+                    padding: '12px 0 10px 0',
+                    background: inventoryTab === 'inventory' ? '#181818' : 'transparent',
+                    color: inventoryTab === 'inventory' ? '#fff' : '#aaa',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    border: 'none',
+                    borderBottom: inventoryTab === 'inventory' ? '2px solid #2d8cff' : 'none',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'background .15s, color .15s',
+                    width: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
+                    margin: 0,
+                    borderRadius: 0,
+                    overflow: 'hidden', // revert to hidden to avoid overhang
                   }}
-                  handleAddCharacter={handleAddCharacter}
-                  handleDeleteCharacter={handleDeleteCharacter}
-                  handleInventoryDragEnd={handleInventoryDragEnd}
-                  itemMap={itemMap}
-                  userPriceMap={userPriceMap}
-                  setToast={setToast}
-                  toastTimeoutRef={toastTimeoutRef}
-                  setInventoryContextMenu={setInventoryContextMenu}
-                  getLastUserPriceEntry={getLastUserPriceEntry}
-                  selectedCharacter={selectedCharacter}
-                  handleOpenStockDialog={handleOpenStockDialog}
-                  onRemoveFromStore={handleRemoveFromStore}
-                  onItemSelected={handleInventoryItemSelect}
-                />
-              )}
-              {inventoryTab === 'ledger' && (
-                <Ledger />
-              )}
+                  onClick={() => setInventoryTab('inventory')}
+                >Inventory</button>
+                <button
+                  style={{
+                    flex: 1,
+                    padding: '12px 0 10px 0',
+                    background: inventoryTab === 'ledger' ? '#181818' : 'transparent',
+                    color: inventoryTab === 'ledger' ? '#fff' : '#aaa',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    border: 'none',
+                    borderBottom: inventoryTab === 'ledger' ? '2px solid #2d8cff' : 'none',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'background .15s, color .15s',
+                    width: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
+                    margin: 0,
+                    borderRadius: 0,
+                    overflow: 'hidden', // revert to hidden to avoid overhang
+                  }}
+                  onClick={() => setInventoryTab('ledger')}
+                >Ledger</button>
+              </div>
+              {/* Tab Content */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+                {inventoryTab === 'inventory' && (
+                  <InventoryPanel
+                    characters={characters}
+                    selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
+                    setSelectedCharacterId={id => {
+                      const found = characters.find(c => c.id === id) || null;
+                      setSelectedCharacter(found);
+                      localStorage.setItem('selectedCharacter', JSON.stringify(found));
+                    }}
+                    handleAddCharacter={handleAddCharacter}
+                    handleDeleteCharacter={handleDeleteCharacter}
+                    handleInventoryDragEnd={handleInventoryDragEnd}
+                    itemMap={itemMap}
+                    userPriceMap={userPriceMap}
+                    setToast={setToast}
+                    toastTimeoutRef={toastTimeoutRef}
+                    setInventoryContextMenu={setInventoryContextMenu}
+                    getLastUserPriceEntry={getLastUserPriceEntry}
+                    selectedCharacter={selectedCharacter}
+                    handleOpenStockDialog={handleOpenStockDialog}
+                    onRemoveFromStore={handleRemoveFromStore}
+                    onItemSelected={handleInventoryItemSelect}
+                  />
+                )}
+                {inventoryTab === 'ledger' && (
+                  <Ledger />
+                )}
+              </div>
+            </aside>
+            {/* Main Content */}
+            <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 /* matches inventory panel's right padding */ }}>
+              <InventoryTable
+                filteredItems={filteredItems}
+                search={search}
+                setSearch={setSearch}
+                setModalOpen={() => dispatchModal({ type: 'OPEN_EDIT', item: null })}
+                tableContainerRef={tableContainerRef}
+                tableScrollTop={tableScrollTop}
+                itemMap={itemMap}
+                selectedCharacter={selectedCharacter}
+                userPriceMap={userPriceMap}
+                priceStats={priceStats}
+                handleInventoryContextMenu={handleInventoryContextMenu}
+                highlightedRow={null}
+                handleOpenStockDialog={itemId => setStockDialog({ open: true, itemId })}
+                setSellItem={setSellItem}
+                setSellModalOpen={setSellModalOpen}
+                openHistoryModal={openHistoryModal}
+                filterByFriends={filterByFriends}
+                friendsWhitelist={friendsWhitelist}
+              />
             </div>
-          </aside>
-          {/* Main Content */}
-          <div style={{ flex: 1, minWidth: 0, paddingLeft: 14 /* matches inventory panel's right padding */ }}>
-            <InventoryTable
-              filteredItems={filteredItems}
-              search={search}
-              setSearch={setSearch}
-              setModalOpen={() => dispatchModal({ type: 'OPEN_EDIT', item: null })}
-              tableContainerRef={tableContainerRef}
-              tableScrollTop={tableScrollTop}
-              itemMap={itemMap}
-              selectedCharacter={selectedCharacter}
-              userPriceMap={userPriceMap}
-              priceStats={priceStats}
-              handleInventoryContextMenu={handleInventoryContextMenu}
-              highlightedRow={null}
-              handleOpenStockDialog={itemId => setStockDialog({ open: true, itemId })}
-              setSellItem={setSellItem}
-              setSellModalOpen={setSellModalOpen}
-              openHistoryModal={openHistoryModal}
+          </div>
+          <Toast msg={toast.msg} visible={toast.visible} />
+          <AddEditItemModal
+            open={modalState.open}
+            modalState={modalState}
+            dispatchModal={dispatchModal}
+            items={items}
+            handleAddOrEdit={handleAddOrEdit}
+          />
+          <Modal open={modalState.ign} onClose={() => dispatchModal({ type: 'CLOSE' })}>
+            <h2>Set In-Game Name</h2>
+            <form onSubmit={handleSetIGN} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <input
+                value={modalState.ignInput}
+                onChange={(e) => dispatchModal({ type: 'SET_IGN_INPUT', value: e.target.value })}
+                placeholder="Enter your IGN"
+                autoFocus
+              />
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button type="submit">Save</button>
+                <button type="button" onClick={() => dispatchModal({ type: 'CLOSE' })}>Cancel</button>
+              </div>
+            </form>
+          </Modal>
+          <Modal open={modalState.about} onClose={() => dispatchModal({ type: 'CLOSE' })}>
+            <h2>About</h2>
+            <p>Inventory Tracker v0.1<br />Cross-platform desktop app for tracking game items.<br />Built with Tauri + React.</p>
+          </Modal>
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            open={!!contextMenu.item}
+            onClose={() => setContextMenu({ x: 0, y: 0, item: null })}
+            actions={contextMenu.item ? [
+              {
+                label: "Edit",
+                icon: <span aria-hidden="true">✎</span>,
+                onClick: () => dispatchModal({ type: 'OPEN_EDIT', item: contextMenu.item! })
+              },
+              {
+                label: "Remove from Store",
+                icon: <span aria-hidden="true">🗑</span>,
+                onClick: handleDeleteInventoryItem
+              },
+              {
+                label: "Record Sale...",
+                icon: <span aria-hidden="true">📈</span>,
+                onClick: () => {
+                  setSellItem(contextMenu.item!);
+                  setSellModalOpen(true);
+                }
+              }
+            ] : []}
+          />
+          {priceHistoryModal.open && priceHistoryModal.itemId && (
+            <PriceHistoryModal
+              open={priceHistoryModal.open}
+              onClose={() => setPriceHistoryModal({ open: false })}
+              itemId={priceHistoryModal.itemId ?? ''}
+              itemName={itemMap[priceHistoryModal.itemId]?.name || ''}
+              currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.current_selling_price ?? 0}
               filterByFriends={filterByFriends}
               friendsWhitelist={friendsWhitelist}
+              onSetPrice={async (newPrice) => {
+                if (priceHistoryModal.itemId) {
+                  await handleChangePrice(
+                    priceHistoryModal.itemId,
+                    newPrice,
+                    undefined,
+                    false,
+                    itemMap[priceHistoryModal.itemId]?.name
+                  );
+                  // Optionally, fetchItems() or fetchUserPrices() if needed for full refresh
+                }
+              }}
             />
-          </div>
-        </div>
-        <Toast msg={toast.msg} visible={toast.visible} />
-        <AddEditItemModal
-          open={modalState.open}
-          modalState={modalState}
-          dispatchModal={dispatchModal}
-          items={items}
-          handleAddOrEdit={handleAddOrEdit}
-        />
-        <Modal open={modalState.ign} onClose={() => dispatchModal({ type: 'CLOSE' })}>
-          <h2>Set In-Game Name</h2>
-          <form onSubmit={handleSetIGN} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <input
-              value={modalState.ignInput}
-              onChange={(e) => dispatchModal({ type: 'SET_IGN_INPUT', value: e.target.value })}
-              placeholder="Enter your IGN"
-              autoFocus
+          )}
+          <SellModal
+            open={sellModalOpen}
+            onClose={() => { setSellModalOpen(false); setSellItem(null); }}
+            onSell={(_, price) => {
+              if (sellItem) handleSell(sellItem, price);
+              refreshUserKarma();
+              setSellModalOpen(false);
+              setSellItem(null);
+            }}
+            itemName={sellItem?.name || ''}
+            userPrice={sellItem && userPriceMap.has(sellItem.$id) ? userPriceMap.get(sellItem.$id)?.price : undefined}
+            defaultPrice={sellItem?.current_selling_price}
+          />
+          {stockDialog.open && stockDialog.itemId && (
+            <StockModal
+              open={stockDialog.open}
+              onClose={() => setStockDialog({ open: false, itemId: undefined })}
+              itemId={stockDialog.itemId ?? ''}
+              itemName={itemMap[stockDialog.itemId ?? '']?.name ?? ''}
+              userPriceMap={userPriceMap}
+              characters={characters}
+              selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
+              setToast={setToast}
+              priceHistoryData={priceHistoryData}
+              onAddToStore={(characterId, itemId, amount) => {
+                // Update characters state and localStorage
+                setCharacters(chars => {
+                  const updated = chars.map(c => {
+                    if (c.id !== characterId) return c;
+                    const counts = { ...(c.shop.itemCounts || {}) };
+                    counts[itemId] = (counts[itemId] || 0) + amount;
+                    const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
+                    if (!order.includes(itemId)) order.push(itemId);
+                    return { ...c, shop: { itemCounts: counts, order } };
+                  });
+                  localStorage.setItem('characters', JSON.stringify(updated));
+                  const updatedChar = updated.find(c => c.id === characterId);
+                  if (updatedChar) setSelectedCharacter(updatedChar);
+                  setToast({ msg: `${amount}x ${itemMap[itemId]?.name ?? ''} added to store for ${updatedChar?.name ?? ''}.`, visible: true });
+                  return updated;
+                });
+                setStockDialog({ open: false, itemId: undefined });
+              }}
+              onSetStock={(characterId, itemId, amount) => {
+                // Update characters state and localStorage (set to specific amount)
+                setCharacters(chars => {
+                  const updated = chars.map(c => {
+                    if (c.id !== characterId) return c;
+                    const counts = { ...(c.shop.itemCounts || {}) };
+                    counts[itemId] = amount;
+                    const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
+                    if (!order.includes(itemId)) order.push(itemId);
+                    return { ...c, shop: { itemCounts: counts, order } };
+                  });
+                  localStorage.setItem('characters', JSON.stringify(updated));
+                  const updatedChar = updated.find(c => c.id === characterId);
+                  if (updatedChar) setSelectedCharacter(updatedChar);
+                  setToast({ msg: `Stock for ${itemMap[itemId]?.name ?? ''} set to ${amount} for ${updatedChar?.name ?? ''}.`, visible: true });
+                  return updated;
+                });
+                setStockDialog({ open: false, itemId: undefined });
+              }}
+              handleChangePrice={handleChangePrice}
+              onRemoveFromStore={handleRemoveFromStore}
             />
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button type="submit">Save</button>
-              <button type="button" onClick={() => dispatchModal({ type: 'CLOSE' })}>Cancel</button>
-            </div>
-          </form>
-        </Modal>
-        <Modal open={modalState.about} onClose={() => dispatchModal({ type: 'CLOSE' })}>
-          <h2>About</h2>
-          <p>Inventory Tracker v0.1<br />Cross-platform desktop app for tracking game items.<br />Built with Tauri + React.</p>
-        </Modal>
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          open={!!contextMenu.item}
-          onClose={() => setContextMenu({ x: 0, y: 0, item: null })}
-          actions={contextMenu.item ? [
-            {
-              label: "Edit",
-              icon: <span aria-hidden="true">✎</span>,
-              onClick: () => dispatchModal({ type: 'OPEN_EDIT', item: contextMenu.item! })
-            },
-            {
-              label: "Remove from Store",
-              icon: <span aria-hidden="true">🗑</span>,
-              onClick: handleDeleteInventoryItem
-            },
-            {
-              label: "Record Sale...",
-              icon: <span aria-hidden="true">📈</span>,
-              onClick: () => {
-                setSellItem(contextMenu.item!);
-                setSellModalOpen(true);
-              }
-            }
-          ] : []}
-        />
-        {priceHistoryModal.open && priceHistoryModal.itemId && (
-          <PriceHistoryModal
-            open={priceHistoryModal.open}
-            onClose={() => setPriceHistoryModal({ open: false })}
-            itemId={priceHistoryModal.itemId ?? ''}
-            itemName={itemMap[priceHistoryModal.itemId]?.name || ''}
-            currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.current_selling_price ?? 0}
-            filterByFriends={filterByFriends}
-            friendsWhitelist={friendsWhitelist}
-            onSetPrice={async (newPrice) => {
-              if (priceHistoryModal.itemId) {
-                await handleChangePrice(
-                  priceHistoryModal.itemId,
-                  newPrice,
-                  undefined,
-                  false,
-                  itemMap[priceHistoryModal.itemId]?.name
-                );
-                // Optionally, fetchItems() or fetchUserPrices() if needed for full refresh
-              }
-            }}
+          )}
+          <ShopItemModal
+            open={shopItemModal.open}
+            onClose={handleCloseShopItemModal}
+            onSell={handleShopItemSell}
+            onRemove={handleShopItemRemove}
+            itemName={shopItemModal.itemId ? (itemMap[shopItemModal.itemId]?.name ?? '') : ''}
+            stockCount={shopItemModal.itemId && selectedCharacter ? (selectedCharacter.shop.itemCounts[shopItemModal.itemId] ?? 0) : 0}
+            price={shopItemModal.itemId ? itemMap[shopItemModal.itemId]?.current_selling_price : undefined}
           />
-        )}
-        <SellModal
-          open={sellModalOpen}
-          onClose={() => { setSellModalOpen(false); setSellItem(null); }}
-          onSell={(_, price) => {
-            if (sellItem) handleSell(sellItem, price);
-            refreshUserKarma();
-            setSellModalOpen(false);
-            setSellItem(null);
-          }}
-          itemName={sellItem?.name || ''}
-          userPrice={sellItem && userPriceMap.has(sellItem.$id) ? userPriceMap.get(sellItem.$id)?.price : undefined}
-          defaultPrice={sellItem?.current_selling_price}
-        />
-        {stockDialog.open && stockDialog.itemId && (
-          <StockModal
-            open={stockDialog.open}
-            onClose={() => setStockDialog({ open: false, itemId: undefined })}
-            itemId={stockDialog.itemId ?? ''}
-            itemName={itemMap[stockDialog.itemId ?? '']?.name ?? ''}
-            userPriceMap={userPriceMap}
-            characters={characters}
-            selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
-            setToast={setToast}
-            priceHistoryData={priceHistoryData}
-            onAddToStore={(characterId, itemId, amount) => {
-              // Update characters state and localStorage
-              setCharacters(chars => {
-                const updated = chars.map(c => {
-                  if (c.id !== characterId) return c;
-                  const counts = { ...(c.shop.itemCounts || {}) };
-                  counts[itemId] = (counts[itemId] || 0) + amount;
-                  const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
-                  if (!order.includes(itemId)) order.push(itemId);
-                  return { ...c, shop: { itemCounts: counts, order } };
-                });
-                localStorage.setItem('characters', JSON.stringify(updated));
-                const updatedChar = updated.find(c => c.id === characterId);
-                if (updatedChar) setSelectedCharacter(updatedChar);
-                setToast({ msg: `${amount}x ${itemMap[itemId]?.name ?? ''} added to store for ${updatedChar?.name ?? ''}.`, visible: true });
-                return updated;
-              });
-              setStockDialog({ open: false, itemId: undefined });
-            }}
-            onSetStock={(characterId, itemId, amount) => {
-              // Update characters state and localStorage (set to specific amount)
-              setCharacters(chars => {
-                const updated = chars.map(c => {
-                  if (c.id !== characterId) return c;
-                  const counts = { ...(c.shop.itemCounts || {}) };
-                  counts[itemId] = amount;
-                  const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
-                  if (!order.includes(itemId)) order.push(itemId);
-                  return { ...c, shop: { itemCounts: counts, order } };
-                });
-                localStorage.setItem('characters', JSON.stringify(updated));
-                const updatedChar = updated.find(c => c.id === characterId);
-                if (updatedChar) setSelectedCharacter(updatedChar);
-                setToast({ msg: `Stock for ${itemMap[itemId]?.name ?? ''} set to ${amount} for ${updatedChar?.name ?? ''}.`, visible: true });
-                return updated;
-              });
-              setStockDialog({ open: false, itemId: undefined });
-            }}
-            handleChangePrice={handleChangePrice}
-            onRemoveFromStore={handleRemoveFromStore}
-          />
-        )}
-        <ShopItemModal
-          open={shopItemModal.open}
-          onClose={handleCloseShopItemModal}
-          onSell={handleShopItemSell}
-          onRemove={handleShopItemRemove}
-          itemName={shopItemModal.itemId ? (itemMap[shopItemModal.itemId]?.name ?? '') : ''}
-          stockCount={shopItemModal.itemId && selectedCharacter ? (selectedCharacter.shop.itemCounts[shopItemModal.itemId] ?? 0) : 0}
-          price={shopItemModal.itemId ? itemMap[shopItemModal.itemId]?.current_selling_price : undefined}
-        />
-        {inventoryContextMenu.open && (
-          <InventoryContextMenu
-            x={inventoryContextMenu.x}
-            y={inventoryContextMenu.y}
-            onClose={handleCloseInventoryContextMenu}
-            onAdjustStock={handleAdjustStock}
-            onPriceHistory={handlePriceHistory}
-            onRecordSale={handleRecordSale}
-            onDelete={handleDeleteInventoryItem}
-            deleteLabel="Remove from Store"
-          />
-        )}
-        {saleWarning?.open && (
-          <SaleWarningModal
-            open={saleWarning.open}
-            onConfirm={confirmSaleWarning}
-            onCancel={cancelSaleWarning}
-            itemName={saleWarning.itemName}
-          />
-        )}
-      </main>
-    </UISettingsContext.Provider>
+          {inventoryContextMenu.open && (
+            <InventoryContextMenu
+              x={inventoryContextMenu.x}
+              y={inventoryContextMenu.y}
+              onClose={handleCloseInventoryContextMenu}
+              onAdjustStock={handleAdjustStock}
+              onPriceHistory={handlePriceHistory}
+              onRecordSale={handleRecordSale}
+              onDelete={handleDeleteInventoryItem}
+              deleteLabel="Remove from Store"
+            />
+          )}
+          {saleWarning?.open && (
+            <SaleWarningModal
+              open={saleWarning.open}
+              onConfirm={confirmSaleWarning}
+              onCancel={cancelSaleWarning}
+              itemName={saleWarning.itemName}
+            />
+          )}
+        </main>
+      </UISettingsContext.Provider>
+    </>
   );
 }

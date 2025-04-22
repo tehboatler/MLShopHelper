@@ -1,8 +1,6 @@
 # MLShopHelper
 
-<p align="center">
-  <img src="/MLSHHeader.png" alt="MLShopHelper Header" style="max-width: 100%; height: auto;" />
-</p>
+![MLShopHelper Header](public/MLSHHeader.png)
 
 MLShopHelper is a collaborative, crowdsourced price tracker and inventory datasheet for MapleLegends items. It empowers the community to track, analyze, and share item prices and shop inventories in real time. All you have to do is log the items you sell and the price you sell them for. The app will handle the rest.
 
@@ -17,6 +15,8 @@ MLShopHelper is a collaborative, crowdsourced price tracker and inventory datash
 - **Price History Tracking:** View detailed box-plot 30d price history for each item.
 - **Price Analytics:** See boxplot charts and statistics for item prices, including outlier filtering.
 - **Hotkeys:** Searching, Adding Items to Store and Selling Items without touching the mouse (e.g., Ctrl+R, Escape).
+
+![MLShopHelper in action](public/MLShopHelper.gif)
 
 ## Getting Started
 

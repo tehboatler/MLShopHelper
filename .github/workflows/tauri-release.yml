@@ -42,10 +42,13 @@ jobs:
           VITE_APP_VERSION: ${{ secrets.VITE_APP_VERSION }}
         run: bun run tauri build
 
+      - name: List built files
+        run: ls -R src-tauri/target/release/
+
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'src-tauri/target/release/bundle/windows/*.exe'
+          subject-path: 'src-tauri/target/release/*.exe'
 
       # --- Windows Code Signing via SignPath ---
       # - name: Sign Windows artifacts with SignPath

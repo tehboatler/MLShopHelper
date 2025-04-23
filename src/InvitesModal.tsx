@@ -140,7 +140,7 @@ export const InvitesModal: React.FC<InvitesModalProps> = ({
             </div>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, width: '100%' }}>
-              {invites.filter(invite => invite.status !== 'redeemed').map((invite, idx) => (
+              {invites.filter(invite => invite.status !== 'redeemed').map((invite, _) => (
                 <li key={invite.code} style={{
                   background: 'rgba(255,255,255,0.04)',
                   borderRadius: 9,

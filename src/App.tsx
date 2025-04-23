@@ -98,7 +98,7 @@ export default function App() {
   }, [loggedIn]);
 
   // --- Karma: Use live hook so Toolbar always updates ---
-  const { karma: userKarma, loading: karmaLoading } = useUserKarma(persistentUserId || '');
+  const { karma: userKarma, loading: _ } = useUserKarma(persistentUserId || '');
 
   // --- User Price Map Memo ---
   const userPriceMap = useMemo(() => {
@@ -255,7 +255,7 @@ export default function App() {
     return null;
   });
   const [addCharacterPrompt, setAddCharacterPrompt] = useState(false);
-  const [addCharName, setAddCharName] = useState("");
+  // const [addCharName, setAddCharName] = useState("");
   const [stockDialog, setStockDialog] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const [shopItemModal, setShopItemModal] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const tableContainerRef = useRef<HTMLDivElement | null>(null);

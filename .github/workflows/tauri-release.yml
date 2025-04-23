@@ -42,6 +42,11 @@ jobs:
           VITE_APP_VERSION: ${{ secrets.VITE_APP_VERSION }}
         run: bun run tauri build
 
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'src-tauri/target/release/bundle/windows/*.exe'
+
       # --- Windows Code Signing via SignPath ---
       # - name: Sign Windows artifacts with SignPath
       #   if: runner.os == 'Windows'
@@ -75,13 +80,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/windows/**
-
-      # --- Attestation/Provenance ---
-      - name: Generate provenance for release assets
-        uses: github-early-access/artifact-attestations@v1
-        with:
-          artifact-path: |
             release/windows/**
 
       # --- VirusTotal Scan ---

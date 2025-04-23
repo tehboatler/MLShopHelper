@@ -15,7 +15,8 @@ MLShopHelper is a collaborative, crowdsourced price tracker and inventory datash
 - **Inventory Management:** Add, edit, and organize shop items. Track stock counts and potential store sale value.
 - **Price History Tracking:** View detailed box-plot 30d price history for each item.
 - **Price Analytics:** See boxplot charts and statistics for item prices, including outlier filtering.
-- **Hotkeys:** Searching, Adding Items to Store and Selling Items without touching the mouse (e.g., Ctrl+R, Escape).
+- **Hotkeys:** Searching, Adding Items to Store and Selling Items without touching the mouse.
+- **Shop Uptime Tracking:** Set timers for monitoring shop uptime, with automatic closure after 24 hours. Supports tracking multiple shops concurrently, with data displayed in the dashboard.
 
 ![MLShopHelper in action](public/MLShopHelper.gif)
 ![Shop Restocking Showcase](public/MLShopHelperShopStockShowcase.gif)

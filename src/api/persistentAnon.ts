@@ -14,18 +14,21 @@ function generateFakeEmail() {
   return `user_${crypto.randomUUID()}@mlshophelper.local`;
 }
 
-export async function createPersistentAnonUser(): Promise<{ user: Models.User<any>, secret: string, email: string }> {
+export async function createPersistentAnonUser(code?: string): Promise<{ user: Models.User<any>, secret: string, email: string }> {
   // 1. Generate a persistent secret
   const secret = crypto.randomUUID();
   const email = generateFakeEmail();
   // 2. Create Appwrite user with fake email and secret as password
   const user = await account.create(ID.unique(), email, secret);
   // 3. Store mapping in anon_links collection with PUBLIC (guests) read permissions
+  // Attach code if provided
+  const docData: Record<string, any> = { secret, userId: user.$id, email };
+  if (code) docData.code = code;
   await databases.createDocument(
     databaseId,
     anonLinksCollectionId,
     ID.unique(),
-    { secret, userId: user.$id, email },
+    docData,
     [
       Permission.read(Role.any()),
       Permission.update(Role.guests()),

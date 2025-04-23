@@ -4,6 +4,7 @@ import { Dropdown } from "./Dropdown";
 import {logout } from "./api/auth";
 // import { getPersistentUserId } from './api/persistentAnon';
 import { FriendsModal } from './FriendsModal';
+import { useInvites } from './providers/InvitesProvider';
 
 interface ToolbarProps {
   onSetIGN: () => void;
@@ -14,9 +15,10 @@ interface ToolbarProps {
   userKarma: number | null;
   filterByFriends: boolean;
   setFilterByFriends: React.Dispatch<React.SetStateAction<boolean>>;
+  onShowInvites: () => void;
 }
 
-export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, userKarma, filterByFriends, setFilterByFriends }: ToolbarProps) {
+export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, userKarma, filterByFriends, setFilterByFriends, onShowInvites }: ToolbarProps) {
   const [showUserModal, setShowUserModal] = useState(false);
   const [userId, _] = useState<string | null>(null);
   const [persistentSecret, setPersistentSecret] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
   const [error, setError] = useState("");
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { openInvites } = useInvites();
 
   const handleShowUserInfo = async () => {
     setLoadingUser(true);
@@ -114,6 +117,31 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <img src="/placeholder-sell.png" alt="Karma" style={{ width: 22, height: 22, objectFit: 'contain', filter: 'grayscale(0.2)' }} />
             <span style={{ color: '#ffb700', fontWeight: 600, fontSize: 16, whiteSpace: 'nowrap', textAlign: 'right', width: '100%' }}>{userKarma !== null ? userKarma : '--'}</span>
+            <button
+              style={{
+                marginLeft: 7,
+                background: 'rgba(45,140,255,0.08)',
+                color: '#2d8cff',
+                border: 'none',
+                borderRadius: 7,
+                fontWeight: 500,
+                fontSize: 15,
+                padding: '4px 14px',
+                cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+                boxShadow: 'none',
+                outline: 'none',
+                letterSpacing: 0.1,
+                opacity: 0.93,
+                position: 'relative',
+                top: '-1px',
+              }}
+              onClick={onShowInvites}
+              aria-label="Show Invites"
+              title="Manage Invites"
+            >
+              Invites
+            </button>
           </div>
         </div>
       </div>

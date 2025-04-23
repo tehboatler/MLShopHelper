@@ -49,18 +49,22 @@ import { addPriceHistoryEntry } from './api/priceHistory';
 import { addPriceHistoryEntryRX } from './priceHistoryRXDB';
 import { updateItem } from './api/items';
 // import { debugAppwriteSession } from './debugAppwriteSession';
-import { subscribeToAppwriteRealtimeForItems } from './rxdb';
+import { subscribeToAppwriteRealtimeForItems, replicateInvitesAppwrite } from './rxdb';
 import { closeDb, getDb } from './rxdb';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 import { SaleWarningModal } from "./SaleWarningModal";
 import { addItem } from './api/items';
 import VersionGatekeeper from './VersionGatekeeper';
+import { InvitesProvider } from './providers/InvitesProvider';
+import { useUserKarma } from './hooks/useUserKarma';
+import { useUserInvites } from './hooks/useUserInvites';
+import { useCreateInvite } from './hooks/useCreateInvite';
+import { InvitesModal } from './InvitesModal';
 
 export default function App() {
   // --- All hooks and state declarations ---
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [userKarma, setUserKarma] = useState<number | null>(null);
   const [dbReady, setDbReady] = useState(false);
   // Debug: Track changes to dbReady, loggedIn, userId
   useEffect(() => {
@@ -92,6 +96,9 @@ export default function App() {
     setPersistentUserId(id);
     console.debug('[App] persistentUserId updated from localStorage:', id, typeof id);
   }, [loggedIn]);
+
+  // --- Karma: Use live hook so Toolbar always updates ---
+  const { karma: userKarma, loading: karmaLoading } = useUserKarma(persistentUserId || '');
 
   // --- User Price Map Memo ---
   const userPriceMap = useMemo(() => {
@@ -148,6 +155,12 @@ export default function App() {
       subscribeToAppwriteRealtimeForItems();
     }
   }, [dbReady]);
+
+  useEffect(() => {
+    getDb().then(db => {
+      replicateInvitesAppwrite(db);
+    });
+  }, []);
 
   // --- Ensure itemStats are updated on app start and refresh ---
   useEffect(() => {
@@ -269,9 +282,9 @@ export default function App() {
     if (persistentUserId) {
       const userDoc = await getPersistentAnonUserById(persistentUserId);
       if (userDoc && typeof userDoc.karma === 'number') {
-        setUserKarma(userDoc.karma);
+        // setUserKarma(userDoc.karma); // REMOVE this line
       } else {
-        setUserKarma(0);
+        // setUserKarma(0); // REMOVE this line
       }
     }
   };
@@ -500,6 +513,11 @@ export default function App() {
       }
     }
   }, [priceHistory, persistentUserId]);
+
+  // --- Invites Modal State ---
+  const [invitesModalOpen, setInvitesModalOpen] = useState(false);
+  const { invites, loading: invitesLoading } = useUserInvites(persistentUserId || '');
+  const { create: createInvite, loading: createInviteLoading, error: createInviteError } = useCreateInvite(persistentUserId || '');
 
   // --- Rest of App logic and rendering ---
   async function handleAddOrEdit(e: React.FormEvent) {
@@ -807,7 +825,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <InvitesProvider userId={persistentUserId || ''} userKarma={userKarma}>
       <VersionGatekeeper />
       <UISettingsContext.Provider value={{ round50k, showUnsold, setRound50k, setShowUnsold, compactMode, setCompactMode }}>
         <TitleBar />
@@ -820,6 +838,7 @@ export default function App() {
           userKarma={userKarma}
           filterByFriends={filterByFriends}
           setFilterByFriends={setFilterByFriends}
+          onShowInvites={() => setInvitesModalOpen(true)}
         />
         {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
         <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 0 }}>
@@ -1136,8 +1155,17 @@ export default function App() {
               itemName={saleWarning.itemName}
             />
           )}
+          <InvitesModal
+            open={invitesModalOpen}
+            onClose={() => setInvitesModalOpen(false)}
+            onCreateInvite={async () => { await createInvite(); }}
+            invites={invites}
+            loading={invitesLoading || createInviteLoading}
+            error={createInviteError}
+            karma={userKarma}
+          />
         </main>
       </UISettingsContext.Provider>
-    </>
+    </InvitesProvider>
   );
 }

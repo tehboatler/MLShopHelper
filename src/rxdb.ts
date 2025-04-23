@@ -97,6 +97,26 @@ export const itemStatsSchema = {
   additionalProperties: false,
 } as const;
 
+// Invite schema
+export const inviteSchema = {
+  title: 'invite schema',
+  version: 1,
+  description: 'describes a user invite',
+  type: 'object',
+  primaryKey: 'code',
+  properties: {
+    code: { type: 'string', maxLength: 32 },
+    createdBy: { type: 'string' },
+    usedBy: { type: ['string', 'null'] },
+    status: { type: 'string', enum: ['redeemed', 'unredeemed', 'expired'] },
+    createdAt: { type: 'string', format: 'date-time' },
+    usedAt: { type: ['string', 'null'], format: 'date-time' },
+    _deleted: { type: 'boolean', default: false },
+  },
+  required: ['code', 'createdBy', 'status', 'createdAt'],
+  additionalProperties: false,
+} as const;
+
 interface ReplicateAppwriteCollectionOptions {
   db: RxDatabase;
   collectionName: string;
@@ -167,6 +187,16 @@ export async function replicateItemStatsAppwrite(db: RxDatabase) {
   });
 }
 
+// --- Minimal sandboxed Appwrite replication for invites ---
+export async function replicateInvitesAppwrite(db: RxDatabase) {
+  return replicateAppwriteCollection({
+    db,
+    collectionName: 'invites',
+    replicationIdentifier: 'invites-replication',
+    envCollectionVar: 'VITE_APPWRITE_INVITES_COLLECTION',
+  });
+}
+
 // Database instance singleton
 let dbPromise: Promise<RxDatabase> | null = null;
 
@@ -203,11 +233,18 @@ async function createDb() {
         1: (doc: any) => doc,
       },
     },
+    invites: {
+      schema: inviteSchema,
+      migrationStrategies: {
+        1: (doc: any) => doc,
+      },
+    },
   });
   // Setup replication, etc.
   await replicateItemsAppwrite(db);
   await replicatePriceHistorySandbox(db);
   await replicateItemStatsAppwrite(db);
+  await replicateInvitesAppwrite(db);
   return db;
 }
 

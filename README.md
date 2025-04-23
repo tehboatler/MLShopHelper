@@ -28,7 +28,25 @@ MLShopHelper is a collaborative, crowdsourced price tracker and inventory datash
 - [ ] **Adding/Filtering/Managing Friends:** Adding and filtering by friends is incomplete and may have usability pitfalls.
 - [ ] **Fuzzy Search Limitations:** Items with unconventional names may yield suboptimal matches. Please report issues via GitHub Issues.
 - [ ] **Boxplot and Price History Display:** Tested only on 2–3 days of data. 30d history and data management need more practical testing.
-- [ ] **Other Usability Pitfalls:** Various other usability issues may exist as the app is still being validated.## Getting Started
+- [ ] **Other Usability Pitfalls:** Various other usability issues may exist as the app is still being validated.
+
+## Trust and Security
+
+As an indie dev, I know running a third-party .exe can raise questions. Here’s why MLShopHelper is safe:
+
+- **Open-Source**: The code is public. Check it out or build it yourself!
+- **SLSA Provenance**: GitHub Actions verifies the .exe matches and is built directly from the source code. Verify with GitHub CLI. (see releases for instructions)
+- **VirusTotal Scan**: Releases are scanned clean by major antivirus engines: report. **I encourage you to rescan it yourself** for peace of mind.
+- **SHA-256 Checksum**: Confirm integrity with:
+
+    ```
+    SHA-256: 34f982a5688bd4bc5d487b715ab101063edeaeb70dfb7d5b7194a11def99830a
+    ```
+- **Unsigned .exe**: As a solo dev in beta, I’m skipping code signing to save costs. Provenance and scans ensure transparency.
+
+For full details, see the notes attached to each release.
+
+## Getting Started
 
 ### Prerequisites
 - [Rust](https://www.rust-lang.org/tools/install) (stable)

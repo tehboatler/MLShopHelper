@@ -1,0 +1,88 @@
+name: Build, Sign, and Release Tauri App
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 'latest'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build Tauri app
+        run: bun run tauri build
+
+      # --- Windows Code Signing via SignPath ---
+      # - name: Sign Windows artifacts with SignPath
+      #   if: runner.os == 'Windows'
+      #   uses: signpath/github-action@v2
+      #   with:
+      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+      #     organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+      #     project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+      #     signing-policy-slug: ${{ secrets.SIGNPATH_POLICY_SLUG }}
+      #     input-artifact-glob: 'src-tauri/target/release/bundle/msi/*.msi'
+      #     output-artifact-directory: 'signed-artifacts/'
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-build
+          path: |
+            src-tauri/target/release/bundle/**
+            # signed-artifacts/**
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-latest-build
+          path: ./release/windows
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/windows/**
+
+      # --- Attestation/Provenance ---
+      - name: Generate provenance for release assets
+        uses: github-early-access/artifact-attestations@v1
+        with:
+          artifact-path: |
+            release/windows/**
+
+      # --- VirusTotal Scan ---
+      - name: VirusTotal Scan
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          for file in $(find release -type f); do
+            echo "Uploading $file to VirusTotal..."
+            curl --request POST \
+              --url https://www.virustotal.com/api/v3/files \
+              --header "x-apikey: $VT_API_KEY" \
+              --form "file=@$file"
+          done

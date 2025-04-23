@@ -15,6 +15,9 @@ import { deleteItem } from './api/items';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 import { useRxdbItemStats } from './hooks/useRxdbItemStats';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { fuzzyIncludes } from "./ItemNameAutocomplete";
+import Fuse from 'fuse.js';
+import { useCurrentUser } from "./hooks/useCurrentUser";
 
 interface InventoryTableProps {
   filteredItems: Item[];
@@ -78,15 +81,71 @@ export default function InventoryTable({
   // filterByFriends,
   // friendsWhitelist
 }: InventoryTableProps) {
+  const { hasLabel } = useCurrentUser();
+  const isAdmin = hasLabel('admin');
+
   // Defensive: filter out undefined items into a local variable
+  const fuse = useMemo(() => new Fuse(filteredItems, {
+    keys: ['name'],
+    threshold: 0.38, // Good balance for typo tolerance and precision
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+    useExtendedSearch: true
+  }), [filteredItems]);
+
   const validItems = useMemo(() => {
-    // Debug: log the incoming filteredItems for inspection
-    console.log('[InventoryTable] filteredItems received:', filteredItems);
-    // Only accept $id (not id) now that normalization is guaranteed
-    const result = filteredItems.filter(i => i && typeof i.$id === 'string' && i.$id.length > 0 && typeof i.name === 'string' && i.name.length > 0);
-    console.log('[InventoryTable] validItems after $id filter:', result);
-    return result;
-  }, [filteredItems]);
+    if (search && search.trim().length > 0) {
+      // Preprocess search for abbreviation/percent expansion (optional, can be removed if you want pure Fuse)
+      const equipMap: Record<string, string> = {
+        "eye acc": "Eye Accessory",
+        "eye": "Eye Accessory",
+        "face acc": "Face Accessory",
+        "face": "Face Accessory",
+        "pet": "Pet Equip.",
+        "top": "Topwear",
+        "bottom": "Bottomwear",
+        "overall": "Overall",
+        "helm": "Helmet",
+        "glove": "Gloves",
+        "gun": "Gun",
+        "cape": "Cape",
+        "claw": "Claw",
+        "staff": "Staff",
+        "wand": "Wand",
+        "knuckle": "Knuckle",
+        "shoes": "Shoes",
+        "shield": "Shield",
+        "earring": "Earring",
+        "sword": "Sword",
+        "one-handed": "One Handed Sword",
+        "one handed": "One Handed Sword",
+        "two-handed": "Two Handed Sword",
+        "two handed": "Two Handed Sword",
+        "1h sword": "One Handed Sword",
+        "2h sword": "Two Handed Sword",
+        "1h axe": "One Handed Axe",
+        "2h axe": "Two Handed Axe",
+        "1h mace": "One Handed Mace",
+        "2h mace": "Two Handed Mace",
+      };
+      const percentMap: Record<string, string> = {
+        "10": "10%",
+        "30": "30%",
+        "50": "50%",
+        "60": "60%",
+        "70": "70%",
+        "100": "100%",
+        "30pct": "30%",
+        "70pct": "70%",
+        "30%": "30%",
+        "70%": "70%",
+      };
+      const parts = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const expanded = parts.map(part => equipMap[part] || percentMap[part] || part).join(' ');
+      return fuse.search(expanded).map(result => result.item);
+    }
+    return filteredItems;
+  }, [filteredItems, search, fuse]);
 
   // Fetch itemStats from RxDB using observable for real-time updates
   const [priceHistory, priceHistoryLoading] = useRxdbPriceHistory();
@@ -568,7 +627,18 @@ export default function InventoryTable({
           `}</style>
         </div>
         {/* Add Item button remains outside input wrapper */}
-        <button className="add-btn" onClick={() => setModalOpen(true)} style={{ marginLeft: 14, height: 40, fontSize: 16 }}>Add Item</button>
+        <button
+          className="add-btn"
+          onClick={() => isAdmin && setModalOpen(true)}
+          disabled={!isAdmin}
+          style={{
+            marginLeft: 14,
+            height: 40,
+            fontSize: 16,
+            opacity: isAdmin ? 1 : 0.5,
+            cursor: isAdmin ? 'pointer' : 'not-allowed',
+          }}
+        >Add Item</button>
       </div>
       <div
         ref={tableContainerRef}
@@ -584,13 +654,7 @@ export default function InventoryTable({
         }}
       >
         <table className="styled-table" style={{ width: '100%', minWidth: 600, tableLayout: 'fixed' }}>
-          <colgroup>
-            <col style={{ width: 80 }} /> {/* Stock */}
-            <col style={{ width: '50%' }} /> {/* Name (50% of table) */}
-            <col style={{ width: '10%' }} /> {/* Your Price */}
-            <col style={{ width: '10%' }} /> {/* Median Price */}
-            <col style={{ width: '10%' }} /> {/* Last Sold */}
-          </colgroup>
+          <colgroup><col style={{ width: 80 }} /><col style={{ width: '50%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /><col style={{ width: '10%' }} /></colgroup>
           <thead>
             {table.getHeaderGroups().map(headerGroup => (
               <tr key={headerGroup.id}>

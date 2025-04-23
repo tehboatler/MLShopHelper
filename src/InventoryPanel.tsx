@@ -2,12 +2,14 @@ import React from "react";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DroppableStateSnapshot, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import type { Character } from "./types";
 import { CharacterDropdown } from "./CharacterDropdown";
+import { NameInputModal } from "./NameInputModal";
+import { ShopTimerModal } from "./ShopTimerModal";
 
 interface InventoryPanelProps {
   characters: Character[];
   selectedCharacterId: string | null;
   setSelectedCharacterId: (id: string | null) => void;
-  handleAddCharacter: () => void;
+  handleAddCharacter: (char: Character) => void;
   handleDeleteCharacter: (id: string) => void;
   handleInventoryDragEnd: (result: DropResult) => void;
   itemMap: Record<string, any>;
@@ -39,7 +41,84 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   handleOpenStockDialog,
   // onRemoveFromStore,
   onItemSelected,
-}) => (
+}) => {
+  const [addModalOpen, setAddModalOpen] = React.useState(false);
+  const [shopTimerModalOpen, setShopTimerModalOpen] = React.useState(false);
+  const [shopCloseTime, setShopCloseTime] = React.useState<Date | null>(null);
+  const [countdown, setCountdown] = React.useState<string>("");
+
+  function handleAddCharacterClick() {
+    setAddModalOpen(true);
+  }
+
+  function handleModalSubmit(name: string) {
+    if (!name.trim()) return;
+    const newChar = { id: Math.random().toString(36).slice(2) + Date.now().toString(36), name: name.trim(), shop: { itemCounts: {}, order: [] } };
+    handleAddCharacter(newChar);
+    setSelectedCharacterId(newChar.id);
+    setAddModalOpen(false);
+  }
+
+  function handleModalClose() {
+    setAddModalOpen(false);
+  }
+
+  // Load shop close time from localStorage on mount or character change
+  React.useEffect(() => {
+    if (!selectedCharacter) return;
+    const key = `shopCloseTime_${selectedCharacter.id}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      setShopCloseTime(new Date(stored));
+    } else {
+      setShopCloseTime(null);
+    }
+  }, [selectedCharacter]);
+
+  // Live countdown timer
+  React.useEffect(() => {
+    if (!shopCloseTime) {
+      setCountdown("");
+      return;
+    }
+    function updateCountdown() {
+      const now = new Date();
+      const diff = shopCloseTime!.getTime() - now.getTime();
+      if (diff <= 0) {
+        setCountdown("00:00");
+        return;
+      }
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setCountdown(
+        `${hours.toString().padStart(2, '0')}:` +
+        `${minutes.toString().padStart(2, '0')}:` +
+        `${seconds.toString().padStart(2, '0')}`
+      );
+    }
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [shopCloseTime]);
+
+  function handleOpenShopTimerModal() {
+    setShopTimerModalOpen(true);
+  }
+
+  function handleShopTimerSubmit(hours: number, minutes: number) {
+    if (!selectedCharacter) return;
+    const close = new Date(Date.now() + hours * 60 * 60 * 1000 + minutes * 60 * 1000);
+    setShopCloseTime(close);
+    localStorage.setItem(`shopCloseTime_${selectedCharacter.id}`, close.toISOString());
+    setShopTimerModalOpen(false);
+  }
+
+  function handleShopTimerClose() {
+    setShopTimerModalOpen(false);
+  }
+
+  return (
     <aside
       className="inventory-panel-scroll"
       style={{
@@ -55,10 +134,60 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
         gap: 10,
       }}
     >
-      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 13, color: '#fff', letterSpacing: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>Inventory</span>
-        <button onClick={handleAddCharacter} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 20, cursor: 'pointer' }} title="Add Character">＋</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span style={{ fontWeight: 700, fontSize: 18, color: '#fff', letterSpacing: 0.5 }}>Shops</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleAddCharacterClick}
+            className="modern-add-character-btn"
+            title="Add Character"
+            aria-label="Add Character"
+          >
+            <img src="/frederick.png" alt="Add Character" style={{ width: 22, height: 22, marginRight: 7, verticalAlign: 'middle', borderRadius: 4 }} />
+            <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: 0.1, verticalAlign: 'middle' }}>Add Character</span>
+          </button>
+        </div>
       </div>
+      {/* Shop Timer Countdown */}
+      {selectedCharacter && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <span style={{ color: '#aab3c5', fontWeight: 500, fontSize: 16, letterSpacing: 0.1 }}>
+            Shop closes in: <span style={{ fontFamily: 'monospace', color: '#2d8cff', fontWeight: 700, fontSize: 18 }}>{countdown || '--:--'}</span>
+          </span>
+          <button
+            onClick={handleOpenShopTimerModal}
+            className="modern-shop-timer-btn"
+            title="Set Shop Timer"
+            aria-label="Set Shop Timer"
+            style={{
+              background: 'none',
+              border: 'none',
+              borderRadius: 8,
+              padding: 0,
+              marginLeft: 0,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              boxShadow: 'none',
+              transition: 'background 0.15s',
+              height: 28,
+              width: 28,
+              minWidth: 28,
+              minHeight: 28,
+            }}
+          >
+            <img src="/grandpaclock.png" alt="Set Shop Timer" style={{ width: 24, height: 24, borderRadius: 4 }} />
+          </button>
+        </div>
+      )}
+      <NameInputModal
+        open={addModalOpen}
+        onClose={handleModalClose}
+        onSubmit={handleModalSubmit}
+        title="Add New Character"
+        label="Character Name"
+        confirmText="Add"
+      />
       <CharacterDropdown
         characters={characters}
         selectedCharacterId={selectedCharacterId}
@@ -244,7 +373,14 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
           <div style={{ color: '#888', fontSize: 15 }}>No character or shop selected.</div>
         )}
       </div>
+      <ShopTimerModal
+        open={shopTimerModalOpen}
+        onClose={handleShopTimerClose}
+        onSubmit={handleShopTimerSubmit}
+      />
     </aside>
   );
+}
 
 export default InventoryPanel;
+// Removed <style> tag with button CSS. Please see App.css for styles.

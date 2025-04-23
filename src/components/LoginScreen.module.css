@@ -5,8 +5,8 @@
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  background: #232526;
   font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  position: relative;
 }
 
 .loginScreenFlexRow {
@@ -86,6 +86,13 @@
   width: 38px;
   height: 38px;
   display: block;
+  animation: logo-bob 2.8s cubic-bezier(0.42,0,0.58,1) infinite;
+}
+
+@keyframes logo-bob {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+  100% { transform: translateY(0); }
 }
 
 .loginTitle {
@@ -196,6 +203,52 @@ hr {
   opacity: 0.35;
 }
 
+.animatedBg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(120deg, #232526 0%, #23243a 100%);
+  pointer-events: none;
+}
+.animatedBg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at 30% 40%, rgba(45,140,255,0.16) 0, transparent 60%),
+              radial-gradient(circle at 70% 70%, rgba(255,183,0,0.10) 0, transparent 70%),
+              linear-gradient(120deg, #232526 0%, #23243a 100%);
+  z-index: 0;
+  pointer-events: none;
+  animation: bg-move 18s linear infinite alternate;
+  opacity: 1;
+}
+@media (max-width: 900px) {
+  .animatedBg,
+  .animatedBg::before {
+    width: 100vw;
+    height: 100vh;
+    min-width: unset;
+    min-height: unset;
+    max-width: unset;
+    max-height: unset;
+  }
+}
+@keyframes bg-move {
+  0% {
+    filter: blur(0px) brightness(1.05);
+    transform: scale(1) translateY(0px);
+  }
+  100% {
+    filter: blur(1.5px) brightness(1.08);
+    transform: scale(1.03) translateY(-18px);
+  }
+}
+
 @media (max-width: 900px) {
   .loginScreenFlexRow {
     flex-direction: column;
@@ -241,4 +294,89 @@ hr {
     width: 28px;
     height: 28px;
   }
+}
+
+.loginFooter {
+  width: 100vw;
+  text-align: center;
+  position: fixed;
+  left: 0;
+  bottom: 12px;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.buildVersion {
+  color: #b0b0b0;
+  font-size: 0.96rem;
+  letter-spacing: 0.01em;
+  opacity: 0.65;
+  pointer-events: none;
+  user-select: text;
+}
+.builtBy {
+  color: #b0b0b0;
+  font-size: 0.92rem;
+  opacity: 0.5;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.alchemyAnim {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 82px;
+  height: 82px;
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+.alchemyFrame {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 82px;
+  height: 82px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  user-select: none;
+}
+.alchemyFrame1 {
+  animation: alchemy-seq-1 1.2s steps(1) infinite;
+  animation-delay: 0s;
+}
+.alchemyFrame2 {
+  animation: alchemy-seq-2 1.2s steps(1) infinite;
+  animation-delay: 0s;
+}
+.alchemyFrame3 {
+  animation: alchemy-seq-3 1.2s steps(1) infinite;
+  animation-delay: 0s;
+}
+@keyframes alchemy-seq-1 {
+  0% { opacity: 1; }
+  32% { opacity: 1; }
+  39% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes alchemy-seq-2 {
+  0% { opacity: 0; }
+  30% { opacity: 0; }
+  33% { opacity: 1; }
+  65% { opacity: 1; }
+  72% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes alchemy-seq-3 {
+  0% { opacity: 0; }
+  63% { opacity: 0; }
+  66% { opacity: 1; }
+  100% { opacity: 1; }
 }

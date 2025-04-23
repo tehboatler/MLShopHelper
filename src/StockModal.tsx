@@ -114,20 +114,7 @@ export function StockModal({
 
   useEffect(() => {
     if (!open) return;
-    // Focus the first focusable element in the modal
-    const focusableSelectors = [
-      'button:not([disabled])',
-      'select:not([disabled])',
-      'input:not([disabled])',
-      '[tabindex]:not([tabindex="-1"])'
-    ];
-    const modal = modalRef.current;
-    if (modal) {
-      const focusables = modal.querySelectorAll<HTMLElement>(focusableSelectors.join(','));
-      if (focusables.length > 0) {
-        focusables[0].focus();
-      }
-    }
+    // Only handle modal-level keyboard shortcuts and focus trap
     function handleKeyDown(e: KeyboardEvent) {
       if (!open) return;
       if (e.key.toLowerCase() === 'q') {
@@ -139,9 +126,14 @@ export function StockModal({
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      } else if (e.key === 'Tab' && modal) {
+      } else if (e.key === 'Tab' && modalRef.current) {
         // Focus trap
-        const focusables = modal.querySelectorAll<HTMLElement>(focusableSelectors.join(','));
+        const focusables = modalRef.current.querySelectorAll<HTMLElement>([
+          'button:not([disabled])',
+          'select:not([disabled])',
+          'input:not([disabled])',
+          '[tabindex]:not([tabindex="-1"])'
+        ].join(','));
         if (focusables.length === 0) return;
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
@@ -158,6 +150,20 @@ export function StockModal({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, handleQuickSell, handleAddToStore, onClose]);
+
+  // --- Amount input ref for autofocus ---
+  const amountInputRef = React.useRef<HTMLInputElement>(null);
+  const prevOpenRef = React.useRef<boolean>(false);
+
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      // Only autofocus when modal just opened
+      setTimeout(() => {
+        amountInputRef.current?.focus();
+      }, 0);
+    }
+    prevOpenRef.current = open;
+  }, [open]);
 
   // --- Handlers ---
   async function handleQuickSell() {
@@ -311,7 +317,15 @@ export function StockModal({
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#232323', borderRadius: 8, padding: '2px 8px', border: '1.5px solid #444', justifyContent:'center', width: inputWidth }}>
             <button type="button" onClick={() => adjustAmount(-5)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>-5</button>
             <button type="button" onClick={() => adjustAmount(-1)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>-1</button>
-            <input type="number" min={1} value={amount} onChange={e => setAmount(Math.max(1, Number(e.target.value)))} style={{ width: 50, fontSize: 15, padding: '6px 0', border: 'none', background: 'transparent', color: '#fff', textAlign: 'center', fontWeight: 600, outline: 0 }} />
+            <input
+              type="number"
+              min={1}
+              value={amount}
+              onChange={e => setAmount(Math.max(1, Number(e.target.value)))}
+              style={{ width: 50, fontSize: 15, padding: '6px 0', border: 'none', background: 'transparent', color: '#fff', textAlign: 'center', fontWeight: 600, outline: 0 }}
+              ref={amountInputRef}
+              autoFocus
+            />
             <button type="button" onClick={() => adjustAmount(1)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>+1</button>
             <button type="button" onClick={() => adjustAmount(5)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>+5</button>
           </div>
@@ -374,6 +388,7 @@ export function StockModal({
             onConfirm={confirmSaleWarning}
             onCancel={cancelSaleWarning}
             itemName={itemName}
+            price={latestPrice}
           />
         )}
         <button

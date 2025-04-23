@@ -11,7 +11,7 @@ import { Modal } from "./Modal"; // TODO: Use this reusable Modal component for 
 import { ContextMenu } from "./ContextMenu";
 import { PriceHistoryModal } from "./PriceHistoryModal";
 import { SellModal } from "./SellModal";
-
+import { NameInputModal } from "./NameInputModal";
 // import { SectionHeader } from "./SectionHeader";
 import { StockModal } from "./StockModal";
 import { ShopItemModal } from "./ShopItemModal";
@@ -29,7 +29,7 @@ import { UISettingsContext } from "./contexts/UISettingsContext";
 import type { DropResult } from '@hello-pangea/dnd';
 import {
   handleDeleteInventoryItem as makeHandleDeleteInventoryItem,
-  handleAddCharacter as makeHandleAddCharacter,
+  // handleAddCharacter as makeHandleAddCharacter,
   // handleCharacterSelect as makeHandleCharacterSelect,
   // handleCharacterChange as makeHandleCharacterChange
 } from './handlers/characterHandlers';
@@ -241,7 +241,8 @@ export default function App() {
     if (saved) return JSON.parse(saved);
     return null;
   });
-  const [addCharacterPrompt, _] = useState(false);
+  const [addCharacterPrompt, setAddCharacterPrompt] = useState(false);
+  const [addCharName, setAddCharName] = useState("");
   const [stockDialog, setStockDialog] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const [shopItemModal, setShopItemModal] = useState<{ open: boolean, itemId?: string }>({ open: false });
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
@@ -666,10 +667,6 @@ export default function App() {
 
   const itemMap = Object.fromEntries(items.map(i => [i.$id, i]));
 
-  // const handleCharacterSelect = makeHandleCharacterSelect(characters, setSelectedCharacter);
-  // const handleCharacterChange = makeHandleCharacterChange(handleCharacterSelect);
-  const handleAddCharacter = makeHandleAddCharacter(setCharacters, setSelectedCharacter);
-
   // Character deletion handler
   function handleDeleteCharacter(id: string) {
     if (!window.confirm('Are you sure you want to delete this character? This cannot be undone.')) return;
@@ -695,7 +692,17 @@ export default function App() {
   const handlePriceHistory = makeHandlePriceHistory(setPriceHistoryModal, inventoryContextMenu);
   const handleRecordSale = makeHandleRecordSale(setSellItem, setSellModalOpen, itemMap, inventoryContextMenu);
   const handleDeleteInventoryItem = makeHandleDeleteInventoryItem(setCharacters, selectedCharacter, inventoryContextMenu);
-  // const handleStock = makeHandleStock(setCharacters, setSelectedCharacter, setStockDialog);
+
+  // --- Add Character Handler ---
+  const handleAddCharacter = (char: Character) => {
+    setCharacters(chars => {
+      const updated = [...chars, char];
+      localStorage.setItem('characters', JSON.stringify(updated));
+      return updated;
+    });
+    setSelectedCharacter(char);
+    localStorage.setItem('selectedCharacter', JSON.stringify(char));
+  };
 
   async function handleCloseShopItemModal() {
     setShopItemModal({ open: false });
@@ -817,16 +824,17 @@ export default function App() {
         {/* Removed duplicate karma-toolbar-display, as it is now handled in Toolbar */}
         <main className={`container${compactMode ? ' compact' : ''}`} style={{ paddingTop: 0, paddingLeft: 0 }}>
           {addCharacterPrompt && (
-            <div style={{
-              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-              background: 'rgba(0,0,0,0.88)', color: '#fff', zIndex: 4000,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <h2 style={{ marginBottom: 24 }}>No characters found</h2>
-              <button style={{ fontSize: 18, padding: '12px 32px', borderRadius: 10, background: '#2d8cff', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }} onClick={handleAddCharacter}>
-                Add Character
-              </button>
-            </div>
+            <NameInputModal
+              open={addCharacterPrompt}
+              onClose={() => setAddCharacterPrompt(false)}
+              onSubmit={name => {
+                handleAddCharacter({ id: crypto.randomUUID(), name, shop: { itemCounts: {}, order: [] } });
+                setAddCharacterPrompt(false);
+              }}
+              title="Add New Character"
+              label="Character Name"
+              confirmText="Add"
+            />
           )}
           <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', minHeight: 0 }}>
             {/* Inventory Sidepanel with Tabs */}

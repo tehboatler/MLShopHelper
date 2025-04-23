@@ -1,0 +1,21 @@
+.sale-warning-price {
+  font-size: clamp(28px, 8vw, 54px) !important;
+  color: #2d8cff;
+  font-weight: 900;
+  margin-top: 18px;
+  margin-bottom: 10px;
+  text-align: center;
+  letter-spacing: 2px;
+  line-height: 1.08;
+  word-break: break-all;
+  font-family: monospace, Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: block;
+}
+.sale-warning-price-mesos {
+  font-size: 32px !important;
+  color: #fff;
+  font-weight: 700;
+  vertical-align: middle;
+}

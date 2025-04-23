@@ -1,13 +1,15 @@
 import React from "react";
+import './SaleWarningModal.css';
 
 interface SaleWarningModalProps {
   open: boolean;
   onConfirm: () => Promise<void> | void;
   onCancel: () => void;
   itemName?: string;
+  price?: number | null;
 }
 
-export const SaleWarningModal: React.FC<SaleWarningModalProps> = ({ open, onConfirm, onCancel, itemName }) => {
+export const SaleWarningModal: React.FC<SaleWarningModalProps> = ({ open, onConfirm, onCancel, itemName, price }) => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -64,8 +66,24 @@ export const SaleWarningModal: React.FC<SaleWarningModalProps> = ({ open, onConf
       >
         <div style={{ padding: 24, textAlign: 'center', width: '100%' }}>
           <h2 style={{ marginBottom: 12 }}>Log Sale for Today?</h2>
+          <div style={{
+            fontSize: 17,
+            fontWeight: 600,
+            color: '#ffb700',
+            marginTop: 16,
+            marginBottom: 2,
+            textAlign: 'center',
+          }}>
+            {itemName ? `Quick Sell: ${itemName}` : 'Quick Sell'}
+          </div>
+          {typeof price === 'number' && (
+            <div className="sale-warning-price">
+              {price.toLocaleString()}<br />
+              <span className="sale-warning-price-mesos">mesos</span>
+            </div>
+          )}
           <p style={{ fontSize: 16, marginBottom: 16 }}>
-            You are about to log a sale for <b>{itemName || 'this item'}</b>.<br /><br />
+            You are about to log a sale for <b>{itemName || 'this item'}</b> at a price of <b>{price !== null && price !== undefined ? price : 'unknown'}</b>.<br /><br />
             <b>Only the first sale of each item per day</b> will be publicly logged to prevent price spam and griefing.<br />
             <br />
             <b>All other sales</b> of this item today will <b>not</b> be public, but will still update your inventory/ledger records privately.<br /><br />

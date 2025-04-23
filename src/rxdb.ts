@@ -1,14 +1,27 @@
-import { createRxDatabase, addRxPlugin } from 'rxdb';
+import { createRxDatabase, addRxPlugin, removeRxDatabase } from 'rxdb';
 import type { RxDatabase } from 'rxdb';
 import { replicateAppwrite } from 'rxdb/plugins/replication-appwrite';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { wrappedValidateAjvStorage, getAjv } from 'rxdb/plugins/validate-ajv';
 import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+
+// --- Auto-wipe RxDB IndexedDB if schema version changes ---
+const APP_SCHEMA_VERSION = 1; // Increment this with any schema change
+const DB_NAME = 'mlshophelper'; // This matches the name in createDb()
+const lastVersion = parseInt(localStorage.getItem('app_schema_version') || '0', 10);
+if (lastVersion !== APP_SCHEMA_VERSION) {
+  removeRxDatabase(DB_NAME, getRxStorageDexie()).then(() => {
+    localStorage.setItem('app_schema_version', APP_SCHEMA_VERSION.toString());
+    window.location.reload();
+  });
+}
 
 // Add plugins
 addRxPlugin(RxDBDevModePlugin);
 addRxPlugin(RxDBQueryBuilderPlugin);
+addRxPlugin(RxDBMigrationSchemaPlugin);
 
 // Register the date-time format with Ajv
 const ajv = getAjv();
@@ -25,7 +38,7 @@ const storage = wrappedValidateAjvStorage({
 // Item schema
 export const itemSchema = {
   title: 'item schema',
-  version: 0,
+  version: 1,
   description: 'describes an inventory item',
   type: 'object',
   primaryKey: 'id',
@@ -43,7 +56,7 @@ export const itemSchema = {
 // Price history schema
 export const priceHistorySchema = {
   title: 'price history schema',
-  version: 0,
+  version: 1,
   description: 'describes a price history entry',
   type: 'object',
   primaryKey: 'id',
@@ -66,7 +79,7 @@ export const priceHistorySchema = {
 // Item stats schema
 export const itemStatsSchema = {
   title: 'item stats schema',
-  version: 0,
+  version: 1,
   description: 'describes stats for an item',
   type: 'object',
   primaryKey: 'itemId',
@@ -172,9 +185,24 @@ async function createDb() {
     multiInstance: false, // Tauri: single instance
   });
   await db.addCollections({
-    items: { schema: itemSchema },
-    priceHistory: { schema: priceHistorySchema },
-    itemStats: { schema: itemStatsSchema },
+    items: {
+      schema: itemSchema,
+      migrationStrategies: {
+        1: (doc: any) => doc,
+      },
+    },
+    priceHistory: {
+      schema: priceHistorySchema,
+      migrationStrategies: {
+        1: (doc: any) => doc,
+      },
+    },
+    itemStats: {
+      schema: itemStatsSchema,
+      migrationStrategies: {
+        1: (doc: any) => doc,
+      },
+    },
   });
   // Setup replication, etc.
   await replicateItemsAppwrite(db);

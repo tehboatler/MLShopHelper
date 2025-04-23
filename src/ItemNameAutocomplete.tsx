@@ -1,10 +1,49 @@
 import React, { useState, useRef, useEffect } from "react";
 
 const EQUIPMENTS: string[] = [
-  "Claw", "Staff", "Wand", "Knuckle", "Shoes", "Topwear", "Bottomwear", "Overall", "Helmet", "Shield", "Gloves", "Cape", "Face Accessory", "Eye Accessory", "Pet Equip."
+  "One Handed Sword",
+  "One Handed Axe",
+  "One Handed Mace",
+  "Dagger",
+  "Wand",
+  "Staff",
+  "Two Handed Sword",
+  "Two Handed Axe",
+  "Two Handed Mace",
+  "Spear",
+  "Polearm",
+  "Bow",
+  "Crossbow",
+  "Claw",
+  "Knuckle",
+  "Gun",
+  "Shoes", 
+  "Topwear", 
+  "Bottomwear", 
+  "Overall", 
+  "Helmet", 
+  "Shield", 
+  "Gloves", 
+  "Cape", 
+  "Face Accessory", 
+  "Eye Accessory", 
+  "Pet Equip.", 
+  "Earring"
 ];
 const STATS: string[] = [
-  "Weapon ATT", "ATT", "Magic Att.", "LUK", "DEX", "STR", "INT", "Jump", "Speed"
+  "Weapon Att.", 
+  "ATT", 
+  "Magic Att.", 
+  "DEF",
+  "HP",
+  "Accuracy",
+  "Avoidability",
+  "LUK", 
+  "DEX", 
+  "STR", 
+  "INT", 
+  "Jump", 
+  "Speed"
 ];
 // const PERCENTAGES: string[] = ["10%", "30%", "50%", "60%", "70%", "100%"];
 
@@ -12,7 +51,7 @@ function normalize(str: string) {
   return str.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function fuzzyIncludes(hay: string, needle: string) {
+export function fuzzyIncludes(hay: string, needle: string) {
   return normalize(hay).includes(normalize(needle));
 }
 
@@ -46,6 +85,7 @@ function generateFuzzySuggestions(input: string): string[] {
     "knuckle": "Knuckle",
     "shoes": "Shoes",
     "shield": "Shield",
+    "earring": "Earring",
     "sword": "Sword",
     "one-handed": "One-handed Sword",
     "two-handed": "Two-handed Sword",

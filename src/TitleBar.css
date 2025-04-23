@@ -9,6 +9,7 @@
   user-select: none;
   -webkit-app-region: drag;
   /* app-region: drag; */
+  z-index: 5000;
 }
 
 .titlebar-title {

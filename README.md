@@ -37,7 +37,7 @@ As an indie dev, I know running a third-party .exe can raise questions. Here’s
 - **Open-Source**: The code is public. Check it out or build it yourself!
 - **SLSA Provenance**: GitHub Actions verifies the .exe matches and is built directly from the source code. Verify with GitHub CLI. (see releases for instructions)
 - **VirusTotal Scan**: Releases are scanned clean by major antivirus engines: report. **I encourage you to rescan it yourself** for peace of mind.
-- **SHA-256 Checksum**: Confirm integrity with:
+- **SHA-256 Checksum**: Confirm integrity with (the current latest releases SHA-256):
 
     ```
     SHA-256: 34f982a5688bd4bc5d487b715ab101063edeaeb70dfb7d5b7194a11def99830a

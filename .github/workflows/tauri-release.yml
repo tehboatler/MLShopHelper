@@ -30,6 +30,16 @@ jobs:
         run: bun install
 
       - name: Build Tauri app
+        env:
+          VITE_APPWRITE_ENDPOINT: ${{ secrets.VITE_APPWRITE_ENDPOINT }}
+          VITE_APPWRITE_PROJECT: ${{ secrets.VITE_APPWRITE_PROJECT }}
+          VITE_APPWRITE_DATABASE: ${{ secrets.VITE_APPWRITE_DATABASE }}
+          VITE_APPWRITE_ITEMS_COLLECTION: ${{ secrets.VITE_APPWRITE_ITEMS_COLLECTION }}
+          VITE_APPWRITE_ANON_LINKS_COLLECTION: ${{ secrets.VITE_APPWRITE_ANON_LINKS_COLLECTION }}
+          VITE_APPWRITE_PRICE_HISTORY_COLLECTION: ${{ secrets.VITE_APPWRITE_PRICE_HISTORY_COLLECTION }}
+          VITE_APPWRITE_STATS_COLLECTION: ${{ secrets.VITE_APPWRITE_STATS_COLLECTION }}
+          VITE_APPWRITE_VERSION_COLLECTION: ${{ secrets.VITE_APPWRITE_VERSION_COLLECTION }}
+          VITE_APP_VERSION: ${{ secrets.VITE_APP_VERSION }}
         run: bun run tauri build
 
       # --- Windows Code Signing via SignPath ---

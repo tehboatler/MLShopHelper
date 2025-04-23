@@ -27,7 +27,7 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
   const [error, setError] = useState("");
   const [showFriendsModal, setShowFriendsModal] = useState(false);
   const [copied, setCopied] = useState(false);
-  const { openInvites } = useInvites();
+  // const { openInvites } = useInvites();
 
   const handleShowUserInfo = async () => {
     setLoadingUser(true);

@@ -15,7 +15,7 @@ import { deleteItem } from './api/items';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 import { useRxdbItemStats } from './hooks/useRxdbItemStats';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { fuzzyIncludes } from "./ItemNameAutocomplete";
+// import { fuzzyIncludes } from "./ItemNameAutocomplete";
 import Fuse from 'fuse.js';
 import { useCurrentUser } from "./hooks/useCurrentUser";
 

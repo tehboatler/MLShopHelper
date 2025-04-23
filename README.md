@@ -21,7 +21,14 @@ MLShopHelper is a collaborative, crowdsourced price tracker and inventory datash
 ![MLShopHelper in action](public/MLShopHelper.gif)
 ![Shop Restocking Showcase](public/MLShopHelperShopStockShowcase.gif)
 
-## Getting Started
+## Known Limitations & Validation Checklist
+
+- [ ] **Code Signing:** Deferred as the project is in the validation phase. Transparency is ensured via provenance and open-source code. (Code signing costs are currently exorbitant & prohibitive.)
+- [ ] **Downvoting Feature:** The downvoting mechanism for flagging inaccurate sales data is incomplete and may not function reliably.
+- [ ] **Adding/Filtering/Managing Friends:** Adding and filtering by friends is incomplete and may have usability pitfalls.
+- [ ] **Fuzzy Search Limitations:** Items with unconventional names may yield suboptimal matches. Please report issues via GitHub Issues.
+- [ ] **Boxplot and Price History Display:** Tested only on 2–3 days of data. 30d history and data management need more practical testing.
+- [ ] **Other Usability Pitfalls:** Various other usability issues may exist as the app is still being validated.## Getting Started
 
 ### Prerequisites
 - [Rust](https://www.rust-lang.org/tools/install) (stable)

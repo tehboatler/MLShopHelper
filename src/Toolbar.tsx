@@ -4,7 +4,7 @@ import { Dropdown } from "./Dropdown";
 import {logout } from "./api/auth";
 // import { getPersistentUserId } from './api/persistentAnon';
 import { FriendsModal } from './FriendsModal';
-import { useInvites } from './providers/InvitesProvider';
+// import { useInvites } from './providers/InvitesProvider';
 
 interface ToolbarProps {
   onSetIGN: () => void;

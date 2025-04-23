@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchCurrentVersionFromAppwrite, subscribeToVersionChange } from './lib/versionCheck';
-
-const BUILD_VERSION = "0.70"; // Update on each release
+// import { BUILD_VERSION } from './constants';
+const BUILD_VERSION = import.meta.env.VITE_APP_VERSION;
 
 export default function VersionGatekeeper() {
   const [latestVersion, setLatestVersion] = useState(BUILD_VERSION);

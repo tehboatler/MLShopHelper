@@ -1,5 +1,5 @@
-name: Build, Sign, and Release Tauri App
-
+name: Build and Release Tauri App with Attestation
+ 
 on:
   workflow_dispatch:
   push:

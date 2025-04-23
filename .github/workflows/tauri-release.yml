@@ -56,11 +56,14 @@ jobs:
           name: windows-latest-build
           path: src-tauri/target/release/*.exe
 
+      - name: List attestation files
+        run: ls -l src-tauri/target/release/
+
       - name: Upload provenance file
         uses: actions/upload-artifact@v4
         with:
           name: windows-latest-provenance
-          path: src-tauri/target/release/*.intoto.jsonl
+          path: src-tauri/target/release/*.exe.intoto.jsonl
 
       # --- Windows Code Signing via SignPath ---
       # - name: Sign Windows artifacts with SignPath

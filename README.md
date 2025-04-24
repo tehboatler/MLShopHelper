@@ -7,6 +7,7 @@ MLShopHelper is a collaborative, crowdsourced price tracker and inventory datash
 
 ## What Makes It Unique?
 - **Crowdsourced Data:** Anyone can submit prices and sales for items. The app aggregates data from all users, making it a living, up-to-date price reference for the ML community.
+- **Owl Repo Data:** Thanks to @geospiza, MLShopHelper displays the latest owl-repo data side-by-side with the real-time crowdsourced price activity.
 - **No Personal Info Required:** Logins are managed by a secret key. You never need to provide email, Discord, or any personal details.
 - **Modern, Fast UI:** Built with Tauri 2.x, React, and TypeScript for a smooth, desktop-native experience.
 - **Filtering by Friends:** Filter items by friends who sell them if you only want to see prices from trusted contributors. (coming soon)

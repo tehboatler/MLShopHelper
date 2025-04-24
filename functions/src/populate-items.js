@@ -85,14 +85,19 @@ export default async ({ req, res, log, error }) => {
     }
     log(`[populate-items] Existing map keys: ${Object.keys(existingMap).length}`);
 
-    // Helper for concurrency-limited batch processing
-    async function batchProcess(items, handler, limit = 20) {
+    // Helper for concurrency-limited batch processing with optional delay between batches
+    async function batchProcess(items, handler, limit = 3, delayMs = 500) {
       const results = [];
       let idx = 0;
       async function next() {
         if (idx >= items.length) return;
         const current = idx++;
         results[current] = await handler(items[current]);
+        // Add delay after every batch
+        if (delayMs && (current + 1) % limit === 0) {
+          log(`[populate-items] Throttling: waiting ${delayMs}ms to avoid rate limits...`);
+          await new Promise(r => setTimeout(r, delayMs));
+        }
         return next();
       }
       await Promise.all(Array(Math.min(limit, items.length)).fill(0).map(next));
@@ -154,7 +159,7 @@ export default async ({ req, res, log, error }) => {
         error(`[populate-items] Failed to upsert ${name}: ${err.message}`);
         return { status: 'failed', name, error: err.message };
       }
-    }, 20); // 20 concurrent
+    }, 3, 500); // 3 concurrent, 500ms delay between batches
 
     // Summarize results
     const summary = upsertResults.reduce((acc, r) => {

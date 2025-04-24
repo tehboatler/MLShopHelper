@@ -8,7 +8,7 @@ import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 
 // --- Auto-wipe RxDB IndexedDB if schema version changes ---
-const APP_SCHEMA_VERSION = 1; // Increment this with any schema change
+const APP_SCHEMA_VERSION = 2; // Increment this with any schema change
 const DB_NAME = 'mlshophelper'; // This matches the name in createDb()
 const lastVersion = parseInt(localStorage.getItem('app_schema_version') || '0', 10);
 if (lastVersion !== APP_SCHEMA_VERSION) {
@@ -38,17 +38,29 @@ const storage = wrappedValidateAjvStorage({
 // Item schema
 export const itemSchema = {
   title: 'item schema',
-  version: 1,
+  version: 2,
   description: 'describes an inventory item',
   type: 'object',
   primaryKey: 'id',
   properties: {
     id: { type: 'string', maxLength: 128 },
     name: { type: 'string' },
-    price: { type: 'number' },
-    owned: { type: 'boolean' },
+    // Price percentiles
+    p0: { type: ['number', 'null'] },
+    p25: { type: ['number', 'null'] },
+    p50: { type: ['number', 'null'] },
+    p75: { type: ['number', 'null'] },
+    p100: { type: ['number', 'null'] },
+    mean: { type: ['number', 'null'] },
+    std: { type: ['number', 'null'] },
+    search_results_captured: { type: ['number', 'null'] },
+    sum_bundle: { type: ['number', 'null'] },
+    num_outlier: { type: ['number', 'null'] },
+    search_item_timestamp: { type: ['string', 'null'], format: 'date-time' },
+    // Legacy/optional fields
+    price: { type: ['number'] },
+    owned: { type: ['boolean', 'null'] },
     notes: { type: ['string', 'null'] },
-    // ...other fields as needed
   },
   required: ['id', 'name', 'price'],
 };
@@ -219,6 +231,7 @@ async function createDb() {
       schema: itemSchema,
       migrationStrategies: {
         1: (doc: any) => doc,
+        2: (doc: any) => doc,
       },
     },
     priceHistory: {

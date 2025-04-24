@@ -11,6 +11,19 @@ export interface AppwriteBaseDocument {
 export interface Item {
   $id: string; // Appwrite document ID
   name: string;
+  // Price percentiles
+  p0?: number;
+  p25?: number;
+  p50?: number;
+  p75?: number;
+  p100?: number;
+  mean?: number;
+  std?: number;
+  search_results_captured?: number;
+  sum_bundle?: number;
+  num_outlier?: number;
+  search_item_timestamp?: string | null;
+  // Legacy/optional fields
   price?: number;
   current_selling_price?: number;
   date_created?: string;

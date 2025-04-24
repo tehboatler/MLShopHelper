@@ -1,4 +1,13 @@
-.env
+.env*
 node_modules/
 dist/
 build/
+.git/
+.DS_Store
+*.log
+*.ts
+*.map
+coverage/
+test/
+__tests__/
+*.md

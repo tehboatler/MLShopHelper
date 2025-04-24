@@ -8,7 +8,7 @@ import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 
 // --- Auto-wipe RxDB IndexedDB if schema version changes ---
-const APP_SCHEMA_VERSION = 2; // Increment this with any schema change
+const APP_SCHEMA_VERSION = 4; // Increment this with any schema change
 const DB_NAME = 'mlshophelper'; // This matches the name in createDb()
 const lastVersion = parseInt(localStorage.getItem('app_schema_version') || '0', 10);
 if (lastVersion !== APP_SCHEMA_VERSION) {
@@ -38,7 +38,7 @@ const storage = wrappedValidateAjvStorage({
 // Item schema
 export const itemSchema = {
   title: 'item schema',
-  version: 2,
+  version: 4,
   description: 'describes an inventory item',
   type: 'object',
   primaryKey: 'id',
@@ -232,6 +232,8 @@ async function createDb() {
       migrationStrategies: {
         1: (doc: any) => doc,
         2: (doc: any) => doc,
+        3: (doc: any) => doc,
+        4: (doc: any) => doc,
       },
     },
     priceHistory: {
@@ -385,13 +387,29 @@ export function subscribeToAppwriteRealtimeForItems() {
       } else if (events.some(e => e.endsWith('.create') || e.endsWith('.update'))) {
         // Document created/updated remotely: upsert into RxDB
         // Ensure the id field is set and sanitize Appwrite system fields
-        const { $id, name, price, owned, notes } = payload;
+        const {
+          $id,
+          name,
+          price,
+          owned,
+          notes,
+          p0, p25, p50, p75, p100, mean, std,
+          search_results_captured,
+          sum_bundle,
+          num_outlier,
+          search_item_timestamp
+        } = payload;
         const item = {
           id: $id,
           name,
           price,
           owned,
-          notes
+          notes,
+          p0, p25, p50, p75, p100, mean, std,
+          search_results_captured,
+          sum_bundle,
+          num_outlier,
+          search_item_timestamp
         };
         if (db.items && typeof db.items.upsert === 'function') {
           await db.items.upsert(item);

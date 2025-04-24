@@ -374,24 +374,20 @@ export default function App() {
   }, [selectedCharacter, loggedIn]);
 
   useEffect(() => {
-    if (loggedIn === true) {
-      let cancelled = false;
-      async function fetchStats() {
-        const stats: Record<string, { recent?: PriceHistoryEntry }> = {};
-        // Batch fetch all latest sold entries for all items
-        const latestMap = await getLatestSoldEntriesBatchRX(userId!);
-        items.forEach(item => {
-          if (Object.prototype.hasOwnProperty.call(latestMap, item.$id)) {
-            stats[item.$id] = { recent: latestMap[item.$id] };
-          } else {
-            stats[item.$id] = {};
-          }
-        });
-        if (!cancelled) setPriceStats(stats);
-      }
-      if (items.length) fetchStats();
-      return () => { cancelled = true; };
+    async function fetchStats() {
+      const stats: Record<string, { recent?: PriceHistoryEntry }> = {};
+      // Batch fetch all latest sold entries for all items
+      const latestMap = await getLatestSoldEntriesBatchRX(userId!);
+      items.forEach(item => {
+        if (Object.prototype.hasOwnProperty.call(latestMap, item.$id)) {
+          stats[item.$id] = { recent: latestMap[item.$id] };
+        } else {
+          stats[item.$id] = {};
+        }
+      });
+      setPriceStats(stats);
     }
+    if (items.length) fetchStats();
   }, [items, loggedIn]);
 
   useEffect(() => {
@@ -1046,6 +1042,16 @@ export default function App() {
               currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.current_selling_price ?? 0}
               filterByFriends={filterByFriends}
               friendsWhitelist={friendsWhitelist}
+              itemStats={itemMap[priceHistoryModal.itemId] ? {
+                p0: itemMap[priceHistoryModal.itemId].p0,
+                p25: itemMap[priceHistoryModal.itemId].p25,
+                p50: itemMap[priceHistoryModal.itemId].p50,
+                p75: itemMap[priceHistoryModal.itemId].p75,
+                p100: itemMap[priceHistoryModal.itemId].p100,
+                mean: itemMap[priceHistoryModal.itemId].mean,
+                std: itemMap[priceHistoryModal.itemId].std,
+                search_item_timestamp: itemMap[priceHistoryModal.itemId].search_item_timestamp,
+              } : {}}
               onSetPrice={async (newPrice) => {
                 if (priceHistoryModal.itemId) {
                   await handleChangePrice(
@@ -1164,6 +1170,7 @@ export default function App() {
             error={createInviteError}
             karma={userKarma}
           />
+          {/* <DevResetButton /> */}
         </main>
       </UISettingsContext.Provider>
     </InvitesProvider>

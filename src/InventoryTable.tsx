@@ -262,9 +262,30 @@ export default function InventoryTable({
         </span>
       ),
       enableSorting: true,
-      cell: info => (
-        <span style={{ width: '100%', minWidth: '50%', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.getValue()}</span>
-      ),
+      cell: info => {
+        const item = info.row.original;
+        const isOwlRepo = !!item.search_item_timestamp;
+        return (
+          <span style={{ width: '100%', minWidth: '50%', display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {info.getValue()}
+            {isOwlRepo && (
+              <span style={{
+                marginLeft: 8,
+                background: '#2e3a4c',
+                color: '#e0d36e',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                verticalAlign: 'middle',
+              }}>
+                owlrepo
+              </span>
+            )}
+          </span>
+        );
+      },
       size: undefined, // Let flex grow handle width
       minSize: undefined,
       maxSize: undefined,

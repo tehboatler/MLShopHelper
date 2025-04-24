@@ -33,6 +33,8 @@ export interface Item {
   notes?: string;
 }
 
+export type ItemStats = Partial<Pick<Item, 'p0' | 'p25' | 'p50' | 'p75' | 'p100' | 'mean' | 'std' | 'search_item_timestamp'>>;
+
 export interface PriceHistoryEntry {
   $id: string;     // Appwrite document ID, always present and used as the primary key
   itemId: string;

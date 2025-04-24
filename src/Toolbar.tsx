@@ -1,9 +1,10 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import React, { useState } from "react";
 import { Dropdown } from "./Dropdown";
-import {logout } from "./api/auth";
+import { logout } from "./api/auth";
 // import { getPersistentUserId } from './api/persistentAnon';
 import { FriendsModal } from './FriendsModal';
+import { UserCredentialModal } from './UserCredentialModal';
 // import { useInvites } from './providers/InvitesProvider';
 
 interface ToolbarProps {
@@ -18,15 +19,15 @@ interface ToolbarProps {
   onShowInvites: () => void;
 }
 
-export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, userKarma, filterByFriends, setFilterByFriends, onShowInvites }: ToolbarProps) {
-  const [showUserModal, setShowUserModal] = useState(false);
+export function Toolbar({ onSetIGN, ign, userKarma, filterByFriends, setFilterByFriends, onShowInvites }: ToolbarProps) {
+  const [showUserCredentialModal, setShowUserCredentialModal] = useState(false);
   const [userId, _] = useState<string | null>(null);
   const [persistentSecret, setPersistentSecret] = useState<string | null>(null);
   const [persistentUserId, setPersistentUserId] = useState<string | null>(null);
   const [loadingUser, setLoadingUser] = useState(false);
-  const [error, setError] = useState("");
+  const [__, setError] = useState("");
   const [showFriendsModal, setShowFriendsModal] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // const [___, setCopied] = useState(false);
   // const { openInvites } = useInvites();
 
   const handleShowUserInfo = async () => {
@@ -37,7 +38,7 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
       const userId = localStorage.getItem('persistentUserId');
       setPersistentSecret(secret);
       setPersistentUserId(userId);
-      setShowUserModal(true);
+      setShowUserCredentialModal(true);
     } catch (e: any) {
       setError(e.message || "Failed to fetch user info.");
     } finally {
@@ -50,13 +51,13 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
     window.location.reload();
   };
 
-  const handleCopySecret = () => {
-    if (persistentSecret) {
-      navigator.clipboard.writeText(persistentSecret);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    }
-  };
+  // const handleCopySecret = () => {
+  //   if (persistentSecret) {
+  //     navigator.clipboard.writeText(persistentSecret);
+  //     setCopied(true);
+  //     setTimeout(() => setCopied(false), 1200);
+  //   }
+  // };
 
   return (
     <header className="toolbar" style={{ width: '100%', background: '#232323', padding: 0 }}>
@@ -77,19 +78,7 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
                 Logout
               </div>
             </Dropdown>
-            <Dropdown label="App">
-              <div className="dropdown-item" onClick={onAbout}>About</div>
-              <div className="dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={compactMode}
-                  onChange={e => setCompactMode(e.target.checked)}
-                  id="compact-mode-toggle"
-                  style={{ marginRight: 8 }}
-                />
-                <label htmlFor="compact-mode-toggle" style={{ cursor: 'pointer', userSelect: 'none' }}>Compact Mode</label>
-              </div>
-            </Dropdown>
+            {/* Removed App Dropdown as requested */}
             <button
               onClick={() => setFilterByFriends(f => !f)}
               style={{
@@ -106,9 +95,9 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
                 boxShadow: filterByFriends ? '0 2px 8px #2d8cff22' : 'none',
                 outline: filterByFriends ? '2px solid #2d8cff' : 'none',
               }}
-              title="Show only entries from trusted friends"
+              title="Show only your own entries"
             >
-              {filterByFriends ? 'Filtering by Friends' : 'Filter by Friends'}
+              {filterByFriends ? 'Filtering by Self' : 'Filter by Self'}
             </button>
           </div>
         </div>
@@ -146,147 +135,13 @@ export function Toolbar({ onSetIGN, onAbout, ign, compactMode, setCompactMode, u
         </div>
       </div>
       <div style={{ clear: 'both' }} />
-      {/* User Info Modal */}
-      {showUserModal && (
-        <div className="modal-backdrop modal-fade-in" style={{ zIndex: 3000, backdropFilter: 'blur(2px)' }} onClick={() => setShowUserModal(false)}>
-          <div
-            className="modal-content modal-content-in"
-            style={{
-              minWidth: 340,
-              maxWidth: 420,
-              background: '#20222a',
-              color: '#fff',
-              borderRadius: 16,
-              padding: '32px 28px 22px 28px',
-              position: 'relative',
-              margin: '60px auto',
-              boxShadow: '0 8px 32px #000a',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 18,
-              alignItems: 'stretch',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              className="modal-close"
-              onClick={() => setShowUserModal(false)}
-              style={{
-                position: 'absolute',
-                top: 14,
-                right: 18,
-                background: 'none',
-                border: 'none',
-                color: '#aaa',
-                fontSize: 26,
-                cursor: 'pointer',
-                padding: 0,
-                lineHeight: 1,
-                transition: 'color 0.15s',
-              }}
-              onMouseOver={e => (e.currentTarget.style.color = '#fff')}
-              onMouseOut={e => (e.currentTarget.style.color = '#aaa')}
-              aria-label="Close"
-            >×</button>
-            <h3 style={{ margin: 0, marginBottom: 8, fontWeight: 700, fontSize: 22, letterSpacing: 0.1 }}>Your Persistent Credentials</h3>
-            {error ? (
-              <div style={{ color: '#f55', fontWeight: 500, fontSize: 16, margin: '12px 0' }}>{error}</div>
-            ) : (
-              <>
-                <div style={{
-                  background: '#23263a',
-                  borderRadius: 10,
-                  padding: '14px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  marginBottom: 7,
-                  border: '1.5px solid #262a3a',
-                }}>
-                  <span style={{ fontSize: 14, color: '#b0b9d6', fontWeight: 600, marginBottom: 2 }}>Persistent Secret</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{
-                      fontFamily: 'monospace',
-                      fontSize: 15,
-                      color: persistentSecret ? '#fff' : '#ffb700',
-                      wordBreak: 'break-all',
-                      background: persistentSecret ? 'rgba(255,255,255,0.04)' : 'none',
-                      padding: persistentSecret ? '3px 7px' : 0,
-                      borderRadius: 6,
-                      userSelect: 'all',
-                      minHeight: 22,
-                      minWidth: 60,
-                      flex: 1
-                    }}>
-                      {persistentSecret || 'Not available. Save it when you create your account!'}
-                    </span>
-                    {persistentSecret && (
-                      <button
-                        onClick={handleCopySecret}
-                        title="Copy secret to clipboard"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: copied ? '#2d8cff' : '#b0b9d6',
-                          fontSize: 18,
-                          cursor: 'pointer',
-                          padding: 0,
-                          marginLeft: 2,
-                          transition: 'color 0.15s',
-                        }}
-                      >
-                        {copied ? '✓' : '📋'}
-                      </button>
-                    )}
-                    {copied && (
-                      <span style={{ color: '#2d8cff', fontWeight: 500, fontSize: 13, marginLeft: 2 }}>Copied!</span>
-                    )}
-                  </div>
-                </div>
-                <div style={{
-                  background: '#23263a',
-                  borderRadius: 10,
-                  padding: '14px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  marginBottom: 7,
-                  border: '1.5px solid #262a3a',
-                }}>
-                  <span style={{ fontSize: 14, color: '#b0b9d6', fontWeight: 600, marginBottom: 2 }}>Persistent User ID</span>
-                  <span style={{
-                    fontFamily: 'monospace',
-                    fontSize: 15,
-                    color: persistentUserId ? '#fff' : '#ffb700',
-                    wordBreak: 'break-all',
-                    background: persistentUserId ? 'rgba(255,255,255,0.04)' : 'none',
-                    padding: persistentUserId ? '3px 7px' : 0,
-                    borderRadius: 6,
-                    userSelect: 'all',
-                    minHeight: 22,
-                    minWidth: 60,
-                  }}>
-                    {persistentUserId || 'Not available.'}
-                  </span>
-                </div>
-                <div style={{
-                  color: '#ffb700',
-                  background: 'rgba(255,183,0,0.08)',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  padding: '10px 14px',
-                  marginTop: 2,
-                  fontWeight: 500,
-                  textAlign: 'center',
-                  border: '1px solid #ffb70044',
-                }}>
-                  <b>Warning:</b> Save these somewhere safe! If you lose them, you cannot recover your data.
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* User Credential Modal */}
+      <UserCredentialModal
+        open={showUserCredentialModal}
+        onClose={() => setShowUserCredentialModal(false)}
+        persistentSecret={persistentSecret}
+        persistentUserId={persistentUserId}
+      />
       {/* Friends Modal */}
       {showFriendsModal && (
         <FriendsModal

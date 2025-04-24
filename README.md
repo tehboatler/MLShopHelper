@@ -41,7 +41,7 @@ As an indie dev, I know running a third-party .exe can raise questions. Here’s
 - **SHA-256 Checksum**: Confirm integrity with (the current latest releases SHA-256):
 
     ```
-    SHA-256: 34f982a5688bd4bc5d487b715ab101063edeaeb70dfb7d5b7194a11def99830a
+    SHA-256: c0a2c2b02f54fe594babbdcd12a24a09c35c5e5dd1b3f8914a48c416d73c1506
     ```
 - **Unsigned .exe**: As a solo dev in beta, I’m skipping code signing to save costs. Provenance and scans ensure transparency.
 

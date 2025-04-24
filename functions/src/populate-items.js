@@ -85,17 +85,31 @@ export default async ({ req, res, log, error }) => {
     }
     log(`[populate-items] Existing map keys: ${Object.keys(existingMap).length}`);
 
+    // Helper for concurrency-limited batch processing
+    async function batchProcess(items, handler, limit = 20) {
+      const results = [];
+      let idx = 0;
+      async function next() {
+        if (idx >= items.length) return;
+        const current = idx++;
+        results[current] = await handler(items[current]);
+        return next();
+      }
+      await Promise.all(Array(Math.min(limit, items.length)).fill(0).map(next));
+      return results;
+    }
+
     let created = 0;
     let updated = 0;
     let skipped = 0;
     let failed = 0;
-    for (const entry of dedupedItems) {
+    const upsertResults = await batchProcess(dedupedItems, async (entry) => {
       const name = entry.search_item;
       const price = entry.p50;
       if (!name || typeof price !== 'number') {
         log(`[populate-items] Skipping item due to missing name or price: ${JSON.stringify(entry)}`);
         skipped++;
-        continue;
+        return { status: 'skipped', name };
       }
       const doc = {
         name,
@@ -123,22 +137,32 @@ export default async ({ req, res, log, error }) => {
           ) {
             skipped++;
             log(`[populate-items] Skipped (no timestamp change): ${name}`);
-            continue;
+            return { status: 'skipped', name };
           }
           await databases.updateDocument(DB_ID, ITEMS_COLLECTION_ID, existing.$id, doc);
           updated++;
           log(`[populate-items] Updated: ${name} (${price})`);
+          return { status: 'updated', name };
         } else {
           await databases.createDocument(DB_ID, ITEMS_COLLECTION_ID, 'unique()', doc);
           created++;
           log(`[populate-items] Created: ${name} (${price})`);
+          return { status: 'created', name };
         }
       } catch (err) {
         failed++;
         error(`[populate-items] Failed to upsert ${name}: ${err.message}`);
+        return { status: 'failed', name, error: err.message };
       }
-    }
-    log(`[populate-items] Upsert results: created=${created}, updated=${updated}, skipped=${skipped}, failed=${failed}`);
+    }, 20); // 20 concurrent
+
+    // Summarize results
+    const summary = upsertResults.reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      return acc;
+    }, {});
+    log(`[populate-items] Upsert summary: ${JSON.stringify(summary)}`);
+
     res.json({ created, updated, skipped, failed });
   } catch (e) {
     error(`[populate-items] Uncaught error: ${e.stack || e}`);

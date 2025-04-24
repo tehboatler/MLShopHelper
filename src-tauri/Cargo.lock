@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "mlshophelper"
-version = "0.1.0"
+version = "0.72.1"
 dependencies = [
  "chrono",
  "rusqlite",

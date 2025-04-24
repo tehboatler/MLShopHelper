@@ -3,7 +3,7 @@ import { Query } from 'appwrite';
 import { databases } from '../lib/appwrite';
 import { updateUserKarma } from './persistentAnon';
 
-const INVITES_COLLECTION = import.meta.env.VITE_APPWRITE_INVITES_COLLECTION || 'invites';
+const INVITES_COLLECTION = import.meta.env.VITE_APPWRITE_INVITES_COLLECTION;
 // const ANON_LINKS_COLLECTION = import.meta.env.VITE_APPWRITE_ANON_LINKS_COLLECTION;
 const DATABASE_ID = import.meta.env.VITE_APPWRITE_DATABASE;
 

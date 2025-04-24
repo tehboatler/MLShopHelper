@@ -47,6 +47,19 @@ export default async ({ req, res, log, error }) => {
       throw e;
     }
 
+    // Deduplicate items: keep only the first (most recent) entry for each item name
+    const dedupedMap = Object.create(null);
+    const dedupedItems = [];
+    for (const entry of items) {
+      const name = entry.search_item;
+      if (!name) continue;
+      if (!dedupedMap[name]) {
+        dedupedMap[name] = true;
+        dedupedItems.push(entry);
+      }
+    }
+    log(`[populate-items] Deduplicated items: reduced from ${items.length} to ${dedupedItems.length}`);
+
     // Bulk fetch all existing items in the collection (handle pagination)
     let allExisting = [];
     let page = 0;
@@ -76,11 +89,17 @@ export default async ({ req, res, log, error }) => {
     let updated = 0;
     let skipped = 0;
     let failed = 0;
-    for (const entry of items) {
+    for (const entry of dedupedItems) {
       const name = entry.search_item;
-      if (!name || typeof entry.p50 !== 'number') continue;
+      const price = entry.p50;
+      if (!name || typeof price !== 'number') {
+        log(`[populate-items] Skipping item due to missing name or price: ${JSON.stringify(entry)}`);
+        skipped++;
+        continue;
+      }
       const doc = {
         name,
+        price, // Use p50 for price
         p0: entry.p0,
         p25: entry.p25,
         p50: entry.p50,
@@ -108,11 +127,11 @@ export default async ({ req, res, log, error }) => {
           }
           await databases.updateDocument(DB_ID, ITEMS_COLLECTION_ID, existing.$id, doc);
           updated++;
-          log(`[populate-items] Updated: ${name} (${entry.p50})`);
+          log(`[populate-items] Updated: ${name} (${price})`);
         } else {
           await databases.createDocument(DB_ID, ITEMS_COLLECTION_ID, 'unique()', doc);
           created++;
-          log(`[populate-items] Created: ${name} (${entry.p50})`);
+          log(`[populate-items] Created: ${name} (${price})`);
         }
       } catch (err) {
         failed++;

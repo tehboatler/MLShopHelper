@@ -1,7 +1,7 @@
 # MLShopHelper
 
 ![MLShopHelper Header](public/MLSHHeader.png)
-[**⬇️ Download the Latest Release (v0.72.0)**](https://github.com/tehboatler/MLShopHelper/releases/tag/v0.72.0)
+[**⬇️ Download the Latest Release (v0.72.1)**](https://github.com/tehboatler/MLShopHelper/releases/tag/v0.72.1)
 
 MLShopHelper is a collaborative, crowdsourced price tracker and inventory datasheet for MapleLegends items. It empowers the community to track, analyze, and share item prices and shop inventories in real time. All you have to do is log the items you sell and the price you sell them for. The app will handle the rest.
 
@@ -41,7 +41,7 @@ As an indie dev, I know running a third-party .exe can raise questions. Here’s
 - **SHA-256 Checksum**: Confirm integrity with (the current latest releases SHA-256):
 
     ```
-    SHA-256: c0a2c2b02f54fe594babbdcd12a24a09c35c5e5dd1b3f8914a48c416d73c1506
+    SHA-256: 7dc64a154de6cb13eb1f465a4af11b6dd82502dd11dd30550697f9b3a041e5ae
     ```
 - **Unsigned .exe**: As a solo dev in beta, I’m skipping code signing to save costs. Provenance and scans ensure transparency.
 

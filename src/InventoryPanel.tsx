@@ -4,6 +4,8 @@ import type { Character } from "./types";
 import { CharacterDropdown } from "./CharacterDropdown";
 import { NameInputModal } from "./NameInputModal";
 import { ShopTimerModal } from "./ShopTimerModal";
+import { InstantTooltip } from "./InstantTooltip";
+import { useRecentPriceHistoryMap } from './hooks/useRecentPriceHistoryMap';
 
 interface InventoryPanelProps {
   characters: Character[];
@@ -46,6 +48,36 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   const [shopTimerModalOpen, setShopTimerModalOpen] = React.useState(false);
   const [shopCloseTime, setShopCloseTime] = React.useState<Date | null>(null);
   const [countdown, setCountdown] = React.useState<string>("");
+
+  // --- Stat dropdown state ---
+  const statOptions = ["p0", "p25", "p50", "p75", "p100"] as const;
+  type StatKey = typeof statOptions[number];
+  const [selectedStat, setSelectedStat] = React.useState<StatKey>("p50");
+
+  // Merge localStorage info into itemMap for display
+  const getMergedItemMap = () => {
+    let localItems: any[] = [];
+    try { localItems = JSON.parse(localStorage.getItem('localItems') || '[]'); } catch {}
+    const merged = { ...itemMap };
+    for (const localItem of localItems) {
+      if (merged[localItem.$id]) {
+        merged[localItem.$id] = { ...merged[localItem.$id], ...localItem };
+      }
+    }
+    return merged;
+  };
+  const mergedItemMap = React.useMemo(getMergedItemMap, [itemMap, localStorage.getItem('localItems')]);
+
+  // --- Fix: ensure persistentUserId is always string or undefined ---
+  const persistentUserIdRaw = typeof window !== 'undefined' ? localStorage.getItem('persistentUserId') : undefined;
+  const persistentUserId = persistentUserIdRaw ?? undefined;
+
+  const itemIds = Object.keys(mergedItemMap);
+  const recentPricesMap = useRecentPriceHistoryMap(itemIds, persistentUserId, 3);
+
+  // --- Highlighted item state for click effect ---
+  const [clickedItemId, setClickedItemId] = React.useState<string | null>(null);
+  const fadeTimeout = React.useRef<NodeJS.Timeout | null>(null);
 
   function handleAddCharacterClick() {
     setAddModalOpen(true);
@@ -116,6 +148,22 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
   function handleShopTimerClose() {
     setShopTimerModalOpen(false);
+  }
+
+  // Format timestamp as relative (e.g. '2d ago', '3h ago', etc.)
+  function formatRelativeDate(dateStr: string) {
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHrs = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHrs / 24);
+    if (diffDays > 0) return `${diffDays}d ago`;
+    if (diffHrs > 0) return `${diffHrs}h ago`;
+    if (diffMin > 0) return `${diffMin}m ago`;
+    if (diffSec > 5) return `${diffSec}s ago`;
+    return 'now';
   }
 
   return (
@@ -195,37 +243,21 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
         onDelete={handleDeleteCharacter}
       />
       {/* Total Sale Value Label */}
-      {selectedCharacter && selectedCharacter.shop && Array.isArray(selectedCharacter.shop.order) && selectedCharacter.shop.order.length > 0 && (
-        (() => {
-          let total = 0;
-          selectedCharacter.shop.order.forEach((itemId: string) => {
-            const item = itemMap[itemId];
-            if (!item) return;
-            const count = selectedCharacter.shop.itemCounts[itemId] || 0;
-            const safeCount = typeof count === 'number' && !isNaN(count) ? count : 0;
-            let price = 0;
-            try {
-              const localItems = JSON.parse(localStorage.getItem('localItems') || '[]');
-              const localItem = localItems.find((i: any) => i.$id === item.$id);
-              price = typeof localItem?.current_selling_price === 'number' ? localItem.current_selling_price : 0;
-            } catch {}
-            if (userPriceMap instanceof Map && userPriceMap.get(item.$id) && typeof userPriceMap.get(item.$id).price === 'number') {
-              price = userPriceMap.get(item.$id).price;
-            } else if (userPriceMap && typeof userPriceMap[item.$id]?.price === 'number') {
-              price = userPriceMap[item.$id].price;
-            } else if (!price && typeof item.current_selling_price === 'number') {
-              price = item.current_selling_price;
-            }
-            total += safeCount * price;
-          });
-          return (
-            <div style={{ color: '#e0c080', fontWeight: 700, fontSize: 16, margin: '2px 0 8px 0', letterSpacing: 0.2 }}>
-              Total Sale Value: {total.toLocaleString()} mesos
-            </div>
-          );
-        })()
-      )}
+      {/* Removed as per user request */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <label htmlFor="stat-select" style={{ color: '#e0c080', fontWeight: 500, fontSize: 15 }}>Stat:</label>
+        <select
+          id="stat-select"
+          value={selectedStat}
+          onChange={e => setSelectedStat(e.target.value as StatKey)}
+          style={{ fontSize: 15, padding: '2px 8px', borderRadius: 6, border: '1.5px solid #e0c080', background: '#232323', color: '#e0c080' }}
+        >
+          {statOptions.map(opt => (
+            <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+          ))}
+        </select>
+      </div>
       <div
         className="inventory-scrollbar-hide"
         style={{
@@ -247,17 +279,15 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                 {(provided: DroppableProvided, _: DroppableStateSnapshot) => (
                   <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'block', gap: 8, minHeight: 40, paddingBottom: 0 }}>
                     {selectedCharacter.shop.order.map((itemId: string, idx: number) => {
-                      const item = itemMap[itemId];
+                      const item = mergedItemMap[itemId];
                       if (!item) return null;
                       const count = selectedCharacter.shop.itemCounts[itemId] || 0;
                       const safeCount = typeof count === 'number' && !isNaN(count) ? count : 0;
                       // --- Always prefer userPriceMap (Map) if available, then local, then default ---
                       let price = 0;
-                      let debugTooltip = '';
                       try {
                         const localItems = JSON.parse(localStorage.getItem('localItems') || '[]');
                         const localItem = localItems.find((i: any) => i.$id === item.$id);
-                        debugTooltip = `local: ${localItem?.current_selling_price} | user: ${userPriceMap instanceof Map ? userPriceMap.get(item.$id)?.price : userPriceMap?.[item.$id]?.price} | default: ${item.current_selling_price}`;
                         price = typeof localItem?.current_selling_price === 'number' ? localItem.current_selling_price : 0;
                       } catch {}
                       if (userPriceMap instanceof Map && userPriceMap.get(item.$id) && typeof userPriceMap.get(item.$id).price === 'number') {
@@ -267,84 +297,144 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                       } else if (!price && typeof item.current_selling_price === 'number') {
                         price = item.current_selling_price;
                       }
-                      // const value = safeCount * price;
+                      const recentPrices = recentPricesMap[item.$id] || [];
                       return (
-                        <Draggable key={item.$id} draggableId={item.$id} index={idx}>
-                          {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                background: snapshot.isDragging ? '#232323' : 'transparent',
-                                borderRadius: 8,
-                                boxShadow: snapshot.isDragging ? '0 2px 12px #0008' : undefined,
-                                border: snapshot.isDragging ? '1.5px solid #2d8cff' : undefined,
-                                padding: '7px 8px',
-                                marginBottom: 1,
-                                cursor: 'grab',
-                                transition: 'background 0.15s, box-shadow 0.15s, border 0.15s',
-                                ...provided.draggableProps.style,
-                              }}
-                              onClick={() => {
-                                if (onItemSelected) onItemSelected(item.name);
-                                if (typeof price === 'number' && price > 0) {
-                                  navigator.clipboard.writeText(price.toString());
-                                  setToast({ msg: `Copied price: ${price.toLocaleString()} mesos`, visible: true });
+                        <React.Fragment key={item.$id}>
+                          <Draggable key={item.$id} draggableId={item.$id} index={idx}>
+                            {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  background: snapshot.isDragging ? '#232323' : (clickedItemId === item.$id ? 'rgba(60, 120, 255, 0.18)' : 'transparent'),
+                                  borderRadius: 8,
+                                  boxShadow: snapshot.isDragging ? '0 2px 12px #0008' : undefined,
+                                  border: snapshot.isDragging ? '1.5px solid #2d8cff' : undefined,
+                                  padding: '7px 8px',
+                                  marginBottom: 1,
+                                  transition: 'background 1.2s cubic-bezier(.7,0,.3,1), box-shadow 0.15s, border 0.15s',
+                                  cursor: 'grab',
+                                  ...provided.draggableProps.style,
+                                }}
+                                onClick={() => {
+                                  if (onItemSelected) onItemSelected(item.name);
+                                  setClickedItemId(item.$id);
+                                  if (fadeTimeout.current) clearTimeout(fadeTimeout.current);
+                                  fadeTimeout.current = setTimeout(() => setClickedItemId(null), 10000);
+                                  if (typeof price === 'number' && price > 0) {
+                                    navigator.clipboard.writeText(price.toString());
+                                    setToast({ msg: `Copied price: ${price.toLocaleString()} mesos`, visible: true });
+                                    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+                                    toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
+                                  }
+                                }}
+                                onDoubleClick={() => {
+                                  navigator.clipboard.writeText(item.name);
+                                  setToast({ msg: `Copied ${item.name}`, visible: true });
                                   if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
                                   toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
-                                }
-                              }}
-                              onDoubleClick={() => {
-                                navigator.clipboard.writeText(item.name);
-                                setToast({ msg: `Copied ${item.name}`, visible: true });
-                                if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-                                toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
-                              }}
-                              onContextMenu={e => {
-                                e.preventDefault();
-                                setInventoryContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId: item.$id });
-                              }}
-                            >
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-                                <span style={{ fontWeight: 600, wordBreak: 'break-word', whiteSpace: 'normal', fontSize: 16, lineHeight: 1.18 }}>{item.name}</span>
-                                <span style={{ color: '#a88f4a', fontWeight: 500, fontSize: 13, marginTop: 2, whiteSpace: 'pre-line' }} title={debugTooltip}>
-                                  {typeof price === 'number' && price > 0
-                                    ? `${price.toLocaleString()} mesos${safeCount > 0 ? `\n(${(safeCount*price).toLocaleString()} total)` : ''}`
-                                    : <span style={{color:'#e74c3c'}}>No price</span>}
-                                </span>
+                                }}
+                                onContextMenu={e => {
+                                  e.preventDefault();
+                                  setInventoryContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId: item.$id });
+                                }}
+                              >
+                                <InstantTooltip
+                                  content={(() => {
+                                    let tooltip = '';
+                                    if (item.added_to_shop_at) {
+                                      tooltip += `Added to shop: ${formatRelativeDate(item.added_to_shop_at)}\n`;
+                                    }
+                                    if (recentPrices.length > 0) {
+                                      tooltip += 'Recent prices:\n';
+                                      recentPrices.forEach((entry, idx) => {
+                                        const priceStr = typeof entry.price === 'number' ? entry.price.toLocaleString() : String(entry.price);
+                                        tooltip += `${formatRelativeDate(entry.date)}: ${priceStr} mesos`;
+                                        if (idx < recentPrices.length - 1) tooltip += '\n';
+                                      });
+                                    }
+                                    return tooltip.trim() || undefined;
+                                  })()}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                                    <span style={{ fontWeight: 600, wordBreak: 'break-word', whiteSpace: 'normal', fontSize: 16, lineHeight: 1.18 }}>{item.name}</span>
+                                    <span style={{ color: '#a88f4a', fontWeight: 500, fontSize: 13, marginTop: 2, whiteSpace: 'pre-line' }}>
+                                      {typeof price === 'number' && price > 0
+                                        ? `${price.toLocaleString()} mesos${safeCount > 0 ? `\n(${(safeCount*price).toLocaleString()} total)` : ''}`
+                                        : <span style={{color:'#e74c3c'}}>No price</span>}
+                                    </span>
+                                    {/* Stat and % diff display only */}
+                                    <span style={{ color: '#2d8cff', fontSize: 13, fontWeight: 600, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                      {(() => {
+                                        // Find stat value from item only (no more localStorage)
+                                        let statValue: number | undefined = undefined;
+                                        if (statValue === undefined && typeof item[selectedStat] === 'number') statValue = item[selectedStat];
+
+                                        // --- Stat diff display ---
+                                        let statDiffNode = null;
+                                        if (typeof statValue === 'number' && typeof price === 'number' && price > 0) {
+                                          const diff = ((price - statValue) / statValue) * 100;
+                                          const diffStr = diff > 0 ? `+${diff.toFixed(1)}%` : `${diff.toFixed(1)}%`;
+                                          const diffColor = diff > 0 ? '#2ecc40' : (diff < 0 ? '#e74c3c' : '#aaa');
+                                          statDiffNode = (
+                                            <>
+                                              {`${selectedStat.toUpperCase()}: ${statValue.toLocaleString()} (`}
+                                              <span style={{ color: diffColor }}>{diffStr}</span>
+                                              {`)`}
+                                            </>
+                                          );
+                                        } else if (typeof statValue === 'number') {
+                                          statDiffNode = `${selectedStat.toUpperCase()}: ${statValue.toLocaleString()}`;
+                                        } else {
+                                          statDiffNode = `${selectedStat.toUpperCase()}: N/A`;
+                                        }
+
+                                        // --- Render compact info block (no price change/time info) ---
+                                        return (
+                                          <>
+                                            <span>{statDiffNode}</span>
+                                          </>
+                                        );
+                                      })()}
+                                    </span>
+                                  </div>
+                                </InstantTooltip>
+                                <span
+                                  style={{
+                                    color: 'rgba(60,40,16,0.92)',
+                                    background: 'linear-gradient(90deg, #f8ecd5 0%, #e7c873 50%, #a86e2f 100%)',
+                                    borderRadius: 999,
+                                    padding: '3px 14px',
+                                    marginLeft: 10,
+                                    fontWeight: 700,
+                                    fontSize: 15,
+                                    minWidth: 32,
+                                    textAlign: 'center',
+                                    boxShadow: '0 2px 8px #0002',
+                                    border: '1.5px solid #e0c08080',
+                                    lineHeight: 1.25,
+                                    display: 'inline-block',
+                                    filter: 'drop-shadow(0 1px 2px #fff6) drop-shadow(0 -1px 2px #bfa16a44)',
+                                    cursor: 'pointer',
+                                    userSelect: 'none',
+                                  }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleOpenStockDialog(item.$id);
+                                  }}
+                                  title="Adjust stock"
+                                >{safeCount}x</span>
                               </div>
-                              <span
-                                style={{
-                                  color: 'rgba(60,40,16,0.92)',
-                                  background: 'linear-gradient(90deg, #f8ecd5 0%, #e7c873 50%, #a86e2f 100%)',
-                                  borderRadius: 999,
-                                  padding: '3px 14px',
-                                  marginLeft: 10,
-                                  fontWeight: 700,
-                                  fontSize: 15,
-                                  minWidth: 32,
-                                  textAlign: 'center',
-                                  boxShadow: '0 2px 8px #0002',
-                                  border: '1.5px solid #e0c08080',
-                                  lineHeight: 1.25,
-                                  display: 'inline-block',
-                                  filter: 'drop-shadow(0 1px 2px #fff6) drop-shadow(0 -1px 2px #bfa16a44)',
-                                  cursor: 'pointer',
-                                  userSelect: 'none',
-                                }}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  handleOpenStockDialog(item.$id);
-                                }}
-                                title="Adjust stock"
-                              >{safeCount}x</span>
-                            </div>
+                            )}
+                          </Draggable>
+                          {idx < selectedCharacter.shop.order.length - 1 && (
+                            <div style={{height:1, background:'linear-gradient(90deg,#3a3a3a 0%,#2d8cff44 100%)', margin:'6px 2px 6px 10px', borderRadius:1}} />
                           )}
-                        </Draggable>
+                        </React.Fragment>
                       );
                     })}
                     {selectedCharacter.shop.order.length === 0 && (

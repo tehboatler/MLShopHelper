@@ -61,6 +61,8 @@ export const itemSchema = {
     price: { type: ['number'] },
     owned: { type: ['boolean', 'null'] },
     notes: { type: ['string', 'null'] },
+    // Local-only tracking fields
+    added_to_shop_at: { type: ['string', 'null'] },
   },
   required: ['id', 'name', 'price'],
 };

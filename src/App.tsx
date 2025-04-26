@@ -77,7 +77,7 @@ export default function App() {
     console.debug('[DEBUG] userId changed:', userId);
   }, [userId]);
   // Only fetch RxDB items if authenticated
-  const [items, ___] = useRxdbItems(!!loggedIn && dbReady);
+  const [items, setItems] = useRxdbItems(!!loggedIn && dbReady);
 
   // --- RxDB price history live subscription ---
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
@@ -142,10 +142,10 @@ export default function App() {
   }, [dbReady, priceHistory, persistentUserId]);
 
   useEffect(() => {
-    console.log('[DEBUG] RxDB items:', items);
+    // console.log('[DEBUG] RxDB items:', items);
     if (Array.isArray(items) && items.length > 0) {
       items.forEach((item, idx) => {
-        console.log(`[DEBUG] Item[${idx}]:`, item);
+        // console.log(`[DEBUG] Item[${idx}]:`, item);
       });
     }
   }, [items]);
@@ -289,13 +289,29 @@ export default function App() {
     }
   };
 
-  // Helper to update price in localStorage and state
-  function updateLocalAndStatePrice(itemId: string, newPrice: number) {
-    let localItems = [];
-    try { localItems = JSON.parse(localStorage.getItem('localItems') || '[]'); } catch {}
-    localItems = localItems.map((i: Item) => i.$id === itemId ? { ...i, current_selling_price: newPrice } : i);
-    localStorage.setItem('localItems', JSON.stringify(localItems));
-    // setItems(prev => prev.map(i => i.$id === itemId ? { ...i, current_selling_price: newPrice } : i));
+  // Helper to update price in RxDB and state
+  async function updateRxdbAndStatePrice(itemId: string, newPrice: number) {
+    const { getDb } = await import('./rxdb');
+    const db = await getDb();
+    const doc = await db.items.findOne({ selector: { $id: itemId } }).exec();
+    if (doc) {
+      const prevPrice = typeof doc.current_selling_price === 'number' ? doc.current_selling_price : undefined;
+      let price_change_history = Array.isArray(doc.price_change_history) ? [...doc.price_change_history] : [];
+      // --- PATCH: Only set added_to_shop_at if not present ---
+      let patchObj: any = { current_selling_price: newPrice };
+      if (!doc.added_to_shop_at) {
+        patchObj.added_to_shop_at = new Date().toISOString();
+      }
+      if (prevPrice !== undefined && prevPrice !== newPrice) {
+        price_change_history.push({
+          timestamp: new Date().toISOString(),
+          from: prevPrice,
+          to: newPrice
+        });
+      }
+      patchObj.price_change_history = price_change_history;
+      await doc.patch(patchObj);
+    }
   }
 
   // Helper to show toast and auto-dismiss after 1.7s
@@ -619,8 +635,7 @@ export default function App() {
       };
       await addPriceHistoryEntryRX(rxdbEntry); // Local RxDB for instant UI update
       await updateItem(itemId, updateObj);
-      updateLocalAndStatePrice(itemId, newPrice);
-      // --- PATCH: Force refresh priceHistory state after local RXDB write ---
+      await updateRxdbAndStatePrice(itemId, newPrice);
       setPriceHistory(prev => [...prev, rxdbEntry]);
       showToast("Price updated and history recorded!");
     } catch (e) {
@@ -1084,13 +1099,14 @@ export default function App() {
               open={stockDialog.open}
               onClose={() => setStockDialog({ open: false, itemId: undefined })}
               itemId={stockDialog.itemId ?? ''}
+              item={itemMap[stockDialog.itemId ?? '']}
               itemName={itemMap[stockDialog.itemId ?? '']?.name ?? ''}
               userPriceMap={userPriceMap}
               characters={characters}
               selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
               setToast={setToast}
               priceHistoryData={priceHistoryData}
-              onAddToStore={(characterId, itemId, amount) => {
+              onAddToStore={(characterId, itemId, amount, pStats) => {
                 // Update characters state and localStorage
                 setCharacters(chars => {
                   const updated = chars.map(c => {
@@ -1099,6 +1115,8 @@ export default function App() {
                     counts[itemId] = (counts[itemId] || 0) + amount;
                     const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
                     if (!order.includes(itemId)) order.push(itemId);
+                    // Optionally, do something with pStats here
+                    // Example: attach pStats to shop or log them
                     return { ...c, shop: { itemCounts: counts, order } };
                   });
                   localStorage.setItem('characters', JSON.stringify(updated));

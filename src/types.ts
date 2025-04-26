@@ -31,6 +31,8 @@ export interface Item {
   priceHistory?: PriceHistoryEntry[];
   owned?: boolean;
   notes?: string;
+  added_to_shop_at?: string | null;
+  price_change_history?: { timestamp: string; from: number; to: number }[];
 }
 
 export type ItemStats = Partial<Pick<Item, 'p0' | 'p25' | 'p50' | 'p75' | 'p100' | 'mean' | 'std' | 'search_item_timestamp'>>;

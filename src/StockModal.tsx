@@ -1,5 +1,5 @@
 import React, { useState, useEffect} from "react";
-import type { Character } from "./types";
+import type { Character, Item } from "./types";
 import { ChangePriceModal } from "./ChangePriceModal";
 import { getLatestUserPriceEntryRX } from './priceHistoryRXDB';
 import { SaleWarningModal } from "./SaleWarningModal";
@@ -9,11 +9,25 @@ interface StockModalProps {
   onClose: () => void;
   itemId: string;
   itemName: string;
+  item?: Item;
   userPriceMap: Map<string, { price: number }>;
   characters: Character[];
   selectedCharacterId: string | null;
   setToast: (toast: { msg: string; visible: boolean }) => void;
-  onAddToStore?: (characterId: string, itemId: string, amount: number) => void;
+  onAddToStore?: (characterId: string, itemId: string, amount: number, pStats?: {
+    mean?: number;
+    std?: number;
+    p0?: number;
+    p25?: number;
+    p50?: number;
+    p75?: number;
+    p100?: number;
+    num_outlier?: number;
+    sum_bundle?: number;
+    search_item_timestamp?: string;
+    search_results_captured?: number;
+    price?: number;
+  }) => void;
   onRemoveFromStore?: (characterId: string, itemId: string) => void;
   onSetStock?: (characterId: string, itemId: string, amount: number) => void;
   handleChangePrice: (itemId: string, newPrice: number, notes?: string, isSale?: boolean, itemName?: string) => Promise<void>;
@@ -25,6 +39,7 @@ export function StockModal({
   onClose,
   itemId,
   itemName,
+  item,
   userPriceMap,
   characters,
   selectedCharacterId,
@@ -48,6 +63,7 @@ export function StockModal({
   useEffect(() => {
     setCharacterId(selectedCharacterId || characters[0]?.id || "");
     setAmount(1);
+    console.log('item:', item);
   }, [open, selectedCharacterId, itemId, userPriceMap, characters]);
 
   useEffect(() => {
@@ -199,24 +215,25 @@ export function StockModal({
 
   function handleAddToStore() {
     if (onAddToStore) {
-      onAddToStore(characterId, itemId, amount);
+      if (item) {
+        const {
+          mean, std, p0, p25, p50, p75, p100, num_outlier, sum_bundle,
+          search_item_timestamp, search_results_captured, price
+        } = item;
+        if (!item.added_to_shop_at) {
+          item.added_to_shop_at = new Date().toISOString();
+        }
+        onAddToStore(characterId, itemId, amount, {
+          mean, std, p0, p25, p50, p75, p100, num_outlier, sum_bundle,
+          search_item_timestamp: search_item_timestamp ?? undefined, search_results_captured, price
+        });
+      } else {
+        onAddToStore(characterId, itemId, amount);
+      }
       return;
     }
-    // fallback: legacy localStorage logic
-    if (!characterId) return;
-    let localChars: Character[] = [];
-    try { localChars = JSON.parse(localStorage.getItem('characters') || '[]'); } catch {}
-    const idx = localChars.findIndex(c => c.id === characterId);
-    if (idx !== -1) {
-      const char = { ...localChars[idx] };
-      if (!char.shop) char.shop = { itemCounts: {}, order: [] };
-      char.shop.itemCounts[itemId] = (char.shop.itemCounts[itemId] || 0) + amount;
-      if (!char.shop.order.includes(itemId)) char.shop.order.push(itemId);
-      localChars[idx] = char;
-      localStorage.setItem('characters', JSON.stringify(localChars));
-      setToast({ msg: `${amount}x ${itemName} added to store for ${char.name}.`, visible: true });
-      onClose();
-    }
+    setToast({ msg: `${amount}x ${itemName} added to store.`, visible: true });
+    onClose();
   }
 
   function handleRemoveFromStore() {
@@ -226,36 +243,7 @@ export function StockModal({
       onClose();
       return;
     }
-    // fallback: legacy localStorage logic (for dev/test only)
-    let localChars: Character[] = [];
-    try { localChars = JSON.parse(localStorage.getItem('characters') || '[]'); } catch {}
-    const idx = localChars.findIndex(c => c.id === characterId);
-    let removed = false;
-    if (idx !== -1) {
-      const char = { ...localChars[idx] };
-      if (char.shop && char.shop.itemCounts && char.shop.itemCounts[itemId]) {
-        delete char.shop.itemCounts[itemId];
-        if (char.shop.order) {
-          char.shop.order = char.shop.order.filter((id: string) => id !== itemId);
-        }
-        localChars[idx] = char;
-        localStorage.setItem('characters', JSON.stringify(localChars));
-        removed = true;
-      }
-    }
-    let localItems: any[] = [];
-    try { localItems = JSON.parse(localStorage.getItem('localItems') || '[]'); } catch {}
-    const newLocalItems = localItems.filter((i: any) => i.$id !== itemId);
-    if (newLocalItems.length !== localItems.length) {
-      localStorage.setItem('localItems', JSON.stringify(newLocalItems));
-      removed = true;
-    }
-    if (removed) {
-      setToast({ msg: `${itemName} removed from store.`, visible: true });
-      onClose();
-    } else {
-      setToast({ msg: `Item not found in store or local items.`, visible: true });
-    }
+    setToast({ msg: `Item not found in store.`, visible: true });
   }
 
   function adjustAmount(val: number) {

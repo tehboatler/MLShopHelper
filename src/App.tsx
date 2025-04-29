@@ -24,6 +24,7 @@ import { getIGNForUserId, setIGNForUserId } from "./api/anonLinks";
 import LoginScreen from "./components/LoginScreen";
 import InventoryTable from "./InventoryTable";
 import { Toast } from "./Toast";
+import { Spinner } from "./components/Spinner";
 import { getPersistentAnonUserById } from "./api/persistentAnon";
 import { UISettingsContext } from "./contexts/UISettingsContext";
 import type { DropResult } from '@hello-pangea/dnd';
@@ -77,7 +78,7 @@ export default function App() {
     console.debug('[DEBUG] userId changed:', userId);
   }, [userId]);
   // Only fetch RxDB items if authenticated
-  const [items, setItems] = useRxdbItems(!!loggedIn && dbReady);
+  const [items, loading] = useRxdbItems(!!loggedIn && dbReady);
 
   // --- RxDB price history live subscription ---
   const [priceHistory, setPriceHistory] = useState<any[]>([]);
@@ -98,7 +99,14 @@ export default function App() {
   }, [loggedIn]);
 
   // --- Karma: Use live hook so Toolbar always updates ---
-  const { karma: userKarma, loading: _ } = useUserKarma(persistentUserId || '');
+  const { karma: userKarma, loading: _, refresh: refreshUserKarma } = useUserKarma(persistentUserId || '');
+
+  // Ensure karma is refreshed whenever persistentUserId changes
+  useEffect(() => {
+    if (persistentUserId) {
+      refreshUserKarma();
+    }
+  }, [persistentUserId, refreshUserKarma]);
 
   // --- User Price Map Memo ---
   const userPriceMap = useMemo(() => {
@@ -277,39 +285,31 @@ export default function App() {
   }
 
   // Utility to refresh user karma from backend
-  const refreshUserKarma = async () => {
-    const persistentUserId = localStorage.getItem('persistentUserId');
-    if (persistentUserId) {
-      const userDoc = await getPersistentAnonUserById(persistentUserId);
-      if (userDoc && typeof userDoc.karma === 'number') {
-        // setUserKarma(userDoc.karma); // REMOVE this line
-      } else {
-        // setUserKarma(0); // REMOVE this line
-      }
-    }
-  };
+  // const refreshUserKarma = async () => {
+  //   const persistentUserId = localStorage.getItem('persistentUserId');
+  //   if (persistentUserId) {
+  //     const userDoc = await getPersistentAnonUserById(persistentUserId);
+  //     if (userDoc && typeof userDoc.karma === 'number') {
+  //       // setUserKarma(userDoc.karma); // REMOVE this line
+  //     } else {
+  //       // setUserKarma(0); // REMOVE this line
+  //     }
+  //   }
+  // };
 
   // Helper to update price in RxDB and state
   async function updateRxdbAndStatePrice(itemId: string, newPrice: number) {
     const { getDb } = await import('./rxdb');
     const db = await getDb();
-    const doc = await db.items.findOne({ selector: { $id: itemId } }).exec();
+    const doc = await db.items.findOne({ selector: { id: itemId } }).exec();
     if (doc) {
-      const prevPrice = typeof doc.current_selling_price === 'number' ? doc.current_selling_price : undefined;
-      let price_change_history = Array.isArray(doc.price_change_history) ? [...doc.price_change_history] : [];
-      // --- PATCH: Only set added_to_shop_at if not present ---
-      let patchObj: any = { current_selling_price: newPrice };
+      // Only update price and added_to_shop_at (do NOT write price_change_history)
+      const prevPrice = typeof doc.price === 'number' ? doc.price : undefined;
+      let patchObj: any = { price: newPrice };
       if (!doc.added_to_shop_at) {
         patchObj.added_to_shop_at = new Date().toISOString();
       }
-      if (prevPrice !== undefined && prevPrice !== newPrice) {
-        price_change_history.push({
-          timestamp: new Date().toISOString(),
-          from: prevPrice,
-          to: newPrice
-        });
-      }
-      patchObj.price_change_history = price_change_history;
+      // (If you want to track price history, do it in the priceHistory collection, not here)
       await doc.patch(patchObj);
     }
   }
@@ -531,6 +531,12 @@ export default function App() {
   const { invites, loading: invitesLoading } = useUserInvites(persistentUserId || '');
   const { create: createInvite, loading: createInviteLoading, error: createInviteError } = useCreateInvite(persistentUserId || '');
 
+  // Ensure karma refresh after invite creation
+  const handleCreateInvite = async () => {
+    await createInvite();
+    await refreshUserKarma();
+  };
+
   // --- Rest of App logic and rendering ---
   async function handleAddOrEdit(e: React.FormEvent) {
     e.preventDefault();
@@ -740,7 +746,7 @@ export default function App() {
   async function handleShopItemSell(_: number) {
     if (!shopItemModal.itemId) return;
     const itemId = shopItemModal.itemId;
-    const price = itemMap[itemId]?.current_selling_price;
+    const price = itemMap[itemId]?.price;
     if (price === undefined) {
       showToast('No price set for this item.');
       return;
@@ -800,9 +806,6 @@ export default function App() {
   }
   // if (loggedIn && !dbReady) {
   //   return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading database…</div>;
-  // }
-  // if (itemsLoading) {
-  //   return <div style={{padding: 40, textAlign: 'center', color: '#bbb', fontSize: 20}}>Loading items…</div>;
   // }
   if (loggedIn === false) {
     return <LoginScreen onLogin={checkAuth} />;
@@ -964,6 +967,8 @@ export default function App() {
                     handleOpenStockDialog={handleOpenStockDialog}
                     onRemoveFromStore={handleRemoveFromStore}
                     onItemSelected={handleInventoryItemSelect}
+                    setSearch={setSearch}
+                    loading={loading}
                   />
                 )}
                 {inventoryTab === 'ledger' && (
@@ -992,6 +997,7 @@ export default function App() {
                 openHistoryModal={openHistoryModal}
                 filterByFriends={filterByFriends}
                 friendsWhitelist={friendsWhitelist}
+                loading={loading}
               />
             </div>
           </div>
@@ -1054,7 +1060,7 @@ export default function App() {
               onClose={() => setPriceHistoryModal({ open: false })}
               itemId={priceHistoryModal.itemId ?? ''}
               itemName={itemMap[priceHistoryModal.itemId]?.name || ''}
-              currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.current_selling_price ?? 0}
+              currentPrice={userPriceMap.has(priceHistoryModal.itemId) ? userPriceMap.get(priceHistoryModal.itemId)?.price ?? 0 : itemMap[priceHistoryModal.itemId]?.price ?? 0}
               filterByFriends={filterByFriends}
               friendsWhitelist={friendsWhitelist}
               itemStats={itemMap[priceHistoryModal.itemId] ? {
@@ -1092,7 +1098,7 @@ export default function App() {
             }}
             itemName={sellItem?.name || ''}
             userPrice={sellItem && userPriceMap.has(sellItem.$id) ? userPriceMap.get(sellItem.$id)?.price : undefined}
-            defaultPrice={sellItem?.current_selling_price}
+            defaultPrice={sellItem?.price}
           />
           {stockDialog.open && stockDialog.itemId && (
             <StockModal
@@ -1106,13 +1112,13 @@ export default function App() {
               selectedCharacterId={selectedCharacter ? selectedCharacter.id : null}
               setToast={setToast}
               priceHistoryData={priceHistoryData}
-              onAddToStore={(characterId, itemId, amount, pStats) => {
+              onAddToStore={(characterId, itemId, pStats) => {
                 // Update characters state and localStorage
                 setCharacters(chars => {
                   const updated = chars.map(c => {
                     if (c.id !== characterId) return c;
                     const counts = { ...(c.shop.itemCounts || {}) };
-                    counts[itemId] = (counts[itemId] || 0) + amount;
+                    counts[itemId] = (counts[itemId] || 0);
                     const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
                     if (!order.includes(itemId)) order.push(itemId);
                     // Optionally, do something with pStats here
@@ -1122,26 +1128,7 @@ export default function App() {
                   localStorage.setItem('characters', JSON.stringify(updated));
                   const updatedChar = updated.find(c => c.id === characterId);
                   if (updatedChar) setSelectedCharacter(updatedChar);
-                  setToast({ msg: `${amount}x ${itemMap[itemId]?.name ?? ''} added to store for ${updatedChar?.name ?? ''}.`, visible: true });
-                  return updated;
-                });
-                setStockDialog({ open: false, itemId: undefined });
-              }}
-              onSetStock={(characterId, itemId, amount) => {
-                // Update characters state and localStorage (set to specific amount)
-                setCharacters(chars => {
-                  const updated = chars.map(c => {
-                    if (c.id !== characterId) return c;
-                    const counts = { ...(c.shop.itemCounts || {}) };
-                    counts[itemId] = amount;
-                    const order = Array.isArray(c.shop.order) ? c.shop.order.slice() : [];
-                    if (!order.includes(itemId)) order.push(itemId);
-                    return { ...c, shop: { itemCounts: counts, order } };
-                  });
-                  localStorage.setItem('characters', JSON.stringify(updated));
-                  const updatedChar = updated.find(c => c.id === characterId);
-                  if (updatedChar) setSelectedCharacter(updatedChar);
-                  setToast({ msg: `Stock for ${itemMap[itemId]?.name ?? ''} set to ${amount} for ${updatedChar?.name ?? ''}.`, visible: true });
+                  setToast({ msg: `${itemMap[itemId]?.name ?? ''} added to store for ${updatedChar?.name ?? ''}.`, visible: true });
                   return updated;
                 });
                 setStockDialog({ open: false, itemId: undefined });
@@ -1157,7 +1144,7 @@ export default function App() {
             onRemove={handleShopItemRemove}
             itemName={shopItemModal.itemId ? (itemMap[shopItemModal.itemId]?.name ?? '') : ''}
             stockCount={shopItemModal.itemId && selectedCharacter ? (selectedCharacter.shop.itemCounts[shopItemModal.itemId] ?? 0) : 0}
-            price={shopItemModal.itemId ? itemMap[shopItemModal.itemId]?.current_selling_price : undefined}
+            price={shopItemModal.itemId ? itemMap[shopItemModal.itemId]?.price : undefined}
           />
           {inventoryContextMenu.open && (
             <InventoryContextMenu
@@ -1182,7 +1169,7 @@ export default function App() {
           <InvitesModal
             open={invitesModalOpen}
             onClose={() => setInvitesModalOpen(false)}
-            onCreateInvite={async () => { await createInvite(); }}
+            onCreateInvite={handleCreateInvite}
             invites={invites}
             loading={invitesLoading || createInviteLoading}
             error={createInviteError}

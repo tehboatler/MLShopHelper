@@ -10,14 +10,13 @@ import {
   SortingState,
 } from '@tanstack/react-table';
 import {  updateAllItemStats } from './rxdb';
-import { MainItemTableContextMenu } from './MainItemTableContextMenu';
-import { deleteItem } from './api/items';
 import { useRxdbPriceHistory } from './hooks/useRxdbPriceHistory';
 import { useRxdbItemStats } from './hooks/useRxdbItemStats';
 import { useVirtualizer } from '@tanstack/react-virtual';
 // import { fuzzyIncludes } from "./ItemNameAutocomplete";
 import Fuse from 'fuse.js';
 import { useCurrentUser } from "./hooks/useCurrentUser";
+import { Spinner } from "./components/Spinner";
 
 interface InventoryTableProps {
   filteredItems: Item[];
@@ -44,6 +43,7 @@ interface InventoryTableProps {
   openHistoryModal: (item: Item) => void;
   filterByFriends?: boolean;
   friendsWhitelist?: string[];
+  loading?: boolean;
 }
 
 const columnHelper = createColumnHelper<Item>();
@@ -80,72 +80,99 @@ export default function InventoryTable({
   openHistoryModal,
   // filterByFriends,
   // friendsWhitelist
+  loading = false,
 }: InventoryTableProps) {
+  console.log('[InventoryTable] loading:', loading);
+  if (loading) {
+    return (
+      <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240 }}>
+        <Spinner size={48} />
+      </div>
+    );
+  }
+
   const { hasLabel } = useCurrentUser();
   const isAdmin = hasLabel('admin');
 
-  // Defensive: filter out undefined items into a local variable
+  // --- Abbreviation and synonym expansion for search queries ---
+  function expandSearchQuery(query: string) {
+    const equipMap: Record<string, string> = {
+      "eye acc": "Eye Accessory",
+      "eye": "Eye Accessory",
+      "face acc": "Face Accessory",
+      "face": "Face Accessory",
+      "pet": "Pet Equip.",
+      "top": "Topwear",
+      "bottom": "Bottomwear",
+      "bot": "Bottomwear",
+      "overall": "Overall",
+      "helm": "Helmet",
+      "glove": "Gloves",
+      "gloves": "Gloves",
+      "gun": "Gun",
+      "cape": "Cape",
+      "claw": "Claw",
+      "staff": "Staff",
+      "wand": "Wand",
+      "knuckle": "Knuckle",
+      "shoes": "Shoes",
+      "shield": "Shield",
+      "ear": "Earring",
+      "earring": "Earring",
+      "sword": "Sword",
+      "one-handed": "One Handed Sword",
+      "one handed": "One Handed Sword",
+      "two-handed": "Two Handed Sword",
+      "two handed": "Two Handed Sword",
+      "1h sword": "One Handed Sword",
+      "2h sword": "Two Handed Sword",
+      "1h axe": "One Handed Axe",
+      "2h axe": "Two Handed Axe",
+      "dex": "DEX",
+      "str": "STR",
+      "int": "INT",
+      "luk": "LUK",
+      "atk": "ATT",
+      "att": "ATT",
+      "matk": "Magic ATT",
+      "ma": "Magic ATT",
+      "wa": "ATT",
+      "acc": "Accuracy",
+      "avoid": "Avoidability",
+      "hp": "HP",
+      "mp": "MP",
+      "def": "DEF",
+      "mdef": "Magic DEF",
+      "30": "30%",
+      "60": "60%",
+      "70": "70%",
+      "100": "100%",
+      // Add more as needed
+    };
+    return query
+      .split(/\s+/)
+      .map(word => equipMap[word.toLowerCase()] || word)
+      .join(' ');
+  }
+
   const fuse = useMemo(() => new Fuse(filteredItems, {
     keys: ['name'],
-    threshold: 0.38, // Good balance for typo tolerance and precision
-    ignoreLocation: true,
-    minMatchCharLength: 2,
-    useExtendedSearch: true
+    threshold: 0.3,           // More forgiving for typos, but still relevant
+    ignoreLocation: true,     // Allow substring matches anywhere
+    minMatchCharLength: 2,    // Only match if at least 2 chars
+    includeScore: true,       // Attach score to each result
+    findAllMatches: true,     // Return all matches
+    shouldSort: true,         // Sort by best match
+    useExtendedSearch: false  // Disable extended syntax for more natural behavior
   }), [filteredItems]);
 
   const validItems = useMemo(() => {
     if (search && search.trim().length > 0) {
-      // Preprocess search for abbreviation/percent expansion (optional, can be removed if you want pure Fuse)
-      const equipMap: Record<string, string> = {
-        "eye acc": "Eye Accessory",
-        "eye": "Eye Accessory",
-        "face acc": "Face Accessory",
-        "face": "Face Accessory",
-        "pet": "Pet Equip.",
-        "top": "Topwear",
-        "bottom": "Bottomwear",
-        "overall": "Overall",
-        "helm": "Helmet",
-        "glove": "Gloves",
-        "gun": "Gun",
-        "cape": "Cape",
-        "claw": "Claw",
-        "staff": "Staff",
-        "wand": "Wand",
-        "knuckle": "Knuckle",
-        "shoes": "Shoes",
-        "shield": "Shield",
-        "earring": "Earring",
-        "sword": "Sword",
-        "one-handed": "One Handed Sword",
-        "one handed": "One Handed Sword",
-        "two-handed": "Two Handed Sword",
-        "two handed": "Two Handed Sword",
-        "1h sword": "One Handed Sword",
-        "2h sword": "Two Handed Sword",
-        "1h axe": "One Handed Axe",
-        "2h axe": "Two Handed Axe",
-        "1h mace": "One Handed Mace",
-        "2h mace": "Two Handed Mace",
-      };
-      const percentMap: Record<string, string> = {
-        "10": "10%",
-        "30": "30%",
-        "50": "50%",
-        "60": "60%",
-        "70": "70%",
-        "100": "100%",
-        "30pct": "30%",
-        "70pct": "70%",
-        "30%": "30%",
-        "70%": "70%",
-      };
-      const parts = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-      const expanded = parts.map(part => equipMap[part] || percentMap[part] || part).join(' ');
-      return fuse.search(expanded).map(result => result.item);
+      const expandedSearch = expandSearchQuery(search);
+      return fuse.search(expandedSearch).map(r => r.item);
     }
     return filteredItems;
-  }, [filteredItems, search, fuse]);
+  }, [search, filteredItems, fuse]);
 
   // Fetch itemStats from RxDB using observable for real-time updates
   const [priceHistory, priceHistoryLoading] = useRxdbPriceHistory();
@@ -409,19 +436,17 @@ export default function InventoryTable({
   // Only render visible rows, but keep table layout
   const visibleRows = virtualRows.map(vr => table.getRowModel().rows[vr.index]);
 
-  // Context menu state for main item table
-  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; itemId: string | null }>({ open: false, x: 0, y: 0, itemId: null });
-
-  // Delete handler for main table
-  const handleDelete = async () => {
-    if (!contextMenu.itemId) return;
-    try {
-      await deleteItem(contextMenu.itemId);
-      // No need to refresh, RxDB + React will update the UI automatically!
-    } catch (err) {
-      alert('Failed to delete item: ' + (err?.toString() || err));
+  // Remove any custom context menu logic and prevent right-click menu
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    const table = document.getElementById('inventory-table-root');
+    if (table) {
+      table.addEventListener('contextmenu', handleContextMenu);
+      return () => table.removeEventListener('contextmenu', handleContextMenu);
     }
-  };
+  }, []);
 
   // Refresh items function (calls parent fetch if available)
   // const refreshItems = () => {
@@ -429,12 +454,6 @@ export default function InventoryTable({
   //     window.location.reload(); // fallback, or trigger parent fetch if available
   //   }
   // };
-
-  // Handler for right click/context menu
-  const handleMainTableContextMenu = (e: React.MouseEvent, itemId: string) => {
-    e.preventDefault();
-    setContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId });
-  };
 
   // Reference for the search input
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -663,6 +682,7 @@ export default function InventoryTable({
       </div>
       <div
         ref={tableContainerRef}
+        id="inventory-table-root"
         style={{
           width: '100%',
           height: 'calc(100vh - 148px)',
@@ -688,104 +708,103 @@ export default function InventoryTable({
             ))}
           </thead>
           <tbody>
-            {/* Spacer row before visible rows */}
-            {virtualRows.length > 0 && (
-              <tr style={{ height: virtualRows[0].start }}>
-                <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent' }} />
+            {loading ? (
+              <tr style={{ height: Math.max(340, table.getRowModel().rows.length * 48) }}>
+                <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent', height: '100%' }}>
+                  <div style={{ width: '100%', minHeight: 340, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Spinner size={48} />
+                  </div>
+                </td>
               </tr>
-            )}
-            {visibleRows.map((row, i) => (
-              <React.Fragment key={row.id}>
-                <tr
-                  key={row.id}
-                  onClick={e => {
-                    if (
-                      e.target instanceof HTMLElement &&
-                      (e.target.tagName === 'BUTTON' ||
-                        e.target.tagName === 'A' ||
-                        e.target.tagName === 'INPUT' ||
-                        e.target.closest('button, a, input'))
-                    ) {
-                      return;
-                    }
-                    openHistoryModal(row.original);
-                  }}
-                  onContextMenu={e => handleMainTableContextMenu(e, row.original.$id)}
-                  style={{
-                    cursor: 'pointer',
-                    background:
-                      selectedRowIdx === i ? '#3a3a3a' : (virtualRows[i]?.index ?? 0) % 2 === 1 ? '#292929' : '#202020',
-                    transition: 'background 0.3s',
-                  }}
-                >
-                  {row.getVisibleCells().map(cell => (
-                    <td key={cell.id} style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      ...(cell.column.id === 'actions' ? {textAlign: 'right'} : {}),
-                    }}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-                {/* Sub-section for percentiles and avg price */}
-                <tr>
-                  <td colSpan={columns.length} style={{ padding: 0, background: (virtualRows[i]?.index ?? 0) % 2 === 1 ? '#292929' : "#202020", borderTop: 'none' }}>
-                    <div
-                      className="compact subrow-bar"
+            ) : (
+              <>
+                {/* Spacer row before visible rows */}
+                {virtualRows.length > 0 && (
+                  <tr style={{ height: virtualRows[0].start }}>
+                    <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent' }} />
+                  </tr>
+                )}
+                {visibleRows.map((row, i) => (
+                  <React.Fragment key={row.id}>
+                    <tr
+                      key={row.id}
+                      onClick={e => {
+                        if (
+                          e.target instanceof HTMLElement &&
+                          (e.target.tagName === 'BUTTON' ||
+                            e.target.tagName === 'A' ||
+                            e.target.tagName === 'INPUT' ||
+                            e.target.closest('button, a, input'))
+                        ) {
+                          return;
+                        }
+                        openHistoryModal(row.original);
+                      }}
                       style={{
-                        width: '100%',
-                        margin: '0',
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        alignItems: 'flex-start',
-                        fontSize: '11px',
-                        color: '#bbb',
-                        padding: '2px 0 2px 8px',
-                        borderRadius: 0,
-                        minHeight: 0,
+                        cursor: 'pointer',
+                        background:
+                          selectedRowIdx === i ? '#3a3a3a' : (virtualRows[i]?.index ?? 0) % 2 === 1 ? '#292929' : '#202020',
+                        transition: 'background 0.3s',
                       }}
                     >
-                      {(() => {
-                        const stats = statsMap.get(row.original.$id);
-                        const format = (n: number | null | undefined) =>
-                          typeof n === 'number' ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '-';
-                        return (
-                          <>
-                            <span style={{ marginRight: 12 }}>P25: {format(stats?.p25)}</span>
-                            <span style={{ marginRight: 12 }}>Median: {format(stats?.median)}</span>
-                            <span style={{ marginRight: 12 }}>Avg: {format(stats?.avg)}</span>
-                            <span style={{ marginRight: 24 }}>P75: {format(stats?.p75)}</span>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </td>
-                </tr>
-              </React.Fragment>
-            ))}
-            {/* Spacer row after visible rows */}
-            {virtualRows.length > 0 && (
-              <tr style={{ height: totalSize - (virtualRows[virtualRows.length-1]?.end ?? 0) }}>
-                <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent' }} />
-              </tr>
+                      {row.getVisibleCells().map(cell => (
+                        <td key={cell.id} style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          ...(cell.column.id === 'actions' ? {textAlign: 'right'} : {}),
+                        }}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                    {/* Sub-section for percentiles and avg price */}
+                    <tr>
+                      <td colSpan={columns.length} style={{ padding: 0, background: (virtualRows[i]?.index ?? 0) % 2 === 1 ? '#292929' : "#202020", borderTop: 'none' }}>
+                        <div
+                          className="compact subrow-bar"
+                          style={{
+                            width: '100%',
+                            margin: '0',
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            alignItems: 'flex-start',
+                            fontSize: '11px',
+                            color: '#bbb',
+                            padding: '2px 0 2px 8px',
+                            borderRadius: 0,
+                            minHeight: 0,
+                          }}
+                        >
+                          {(() => {
+                            const stats = statsMap.get(row.original.$id);
+                            const format = (n: number | null | undefined) =>
+                              typeof n === 'number' ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '-';
+                            return (
+                              <>
+                                <span style={{ marginRight: 12 }}>P25: {format(stats?.p25)}</span>
+                                <span style={{ marginRight: 12 }}>Median: {format(stats?.median)}</span>
+                                <span style={{ marginRight: 12 }}>Avg: {format(stats?.avg)}</span>
+                                <span style={{ marginRight: 24 }}>P75: {format(stats?.p75)}</span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+                {/* Spacer row after visible rows */}
+                {virtualRows.length > 0 && (
+                  <tr style={{ height: totalSize - (virtualRows[virtualRows.length-1]?.end ?? 0) }}>
+                    <td colSpan={columns.length} style={{ padding: 0, border: 'none', background: 'transparent' }} />
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>
       </div>
-      {/* Main item table context menu */}
-      {contextMenu.open && (
-        <MainItemTableContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu({ ...contextMenu, open: false })}
-          onPriceHistory={() => openHistoryModal(validItems.find(i => i.$id === contextMenu.itemId)!)}
-          onChangePrice={() => setModalOpen(true)}
-          onDelete={handleDelete}
-          deleteLabel="Delete from database"
-        />
-      )}
     </div>
   );
 }

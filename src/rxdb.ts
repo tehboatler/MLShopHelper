@@ -11,7 +11,9 @@ import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 const APP_SCHEMA_VERSION = 4; // Increment this with any schema change
 const DB_NAME = 'mlshophelper'; // This matches the name in createDb()
 const lastVersion = parseInt(localStorage.getItem('app_schema_version') || '0', 10);
-if (lastVersion !== APP_SCHEMA_VERSION) {
+// Only wipe the DB if the stored version exists and is different from the current version
+if (localStorage.getItem('app_schema_version') !== null && lastVersion !== APP_SCHEMA_VERSION) {
+  console.warn('[RxDB] Wiping local DB due to schema version change:', lastVersion, '->', APP_SCHEMA_VERSION);
   removeRxDatabase(DB_NAME, getRxStorageDexie()).then(() => {
     localStorage.setItem('app_schema_version', APP_SCHEMA_VERSION.toString());
     window.location.reload();
@@ -129,6 +131,20 @@ export const inviteSchema = {
   },
   required: ['code', 'createdBy', 'status', 'createdAt'],
   additionalProperties: false,
+} as const;
+
+// --- Local-only collection for added_to_shop_at ---
+export const addedToShopAtSchema = {
+  title: 'added_to_shop_at schema',
+  version: 0, // bump version for schema fix
+  description: 'Local-only added_to_shop_at timestamps',
+  type: 'object',
+  primaryKey: 'itemId',
+  properties: {
+    itemId: { type: 'string', maxLength: 128 },
+    added_to_shop_at: { type: ['string', 'null'], format: 'date-time' },
+  },
+  required: ['itemId'],
 } as const;
 
 interface ReplicateAppwriteCollectionOptions {
@@ -256,7 +272,18 @@ async function createDb() {
         1: (doc: any) => doc,
       },
     },
+    addedToShopAt: {
+      schema: addedToShopAtSchema,
+    },
   });
+  // Log all collections
+  console.log('[RxDB][createDb] Collections:', Object.keys(db.collections));
+  // Log the initial state of addedToShopAt
+  if (db.addedToShopAt) {
+    db.addedToShopAt.find().exec().then(docs => {
+      console.log('[RxDB][createDb] addedToShopAt initial docs:', docs.map(d => d.toJSON()));
+    });
+  }
   // Setup replication, etc.
   await replicateItemsAppwrite(db);
   await replicatePriceHistorySandbox(db);
@@ -301,12 +328,12 @@ export async function getDb() {
 export async function updateAllItemStats() {
   const db = await getDb();
   const priceHistory = await db.priceHistory.find().exec();
-  console.log('[itemStats] priceHistory entries:', priceHistory.length, priceHistory);
+  // console.log('[itemStats] priceHistory entries:', priceHistory.length, priceHistory);
   const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 
   // Get all current itemStats for quick lookup
   const currentStatsArr = await db.itemStats.find().exec();
-  console.log('[itemStats] current itemStats before update:', currentStatsArr.length, currentStatsArr);
+  // console.log('[itemStats] current itemStats before update:', currentStatsArr.length, currentStatsArr);
   const currentStatsMap = new Map<string, any>(
     currentStatsArr.map(stat => [stat.itemId, stat])
   );
@@ -316,14 +343,14 @@ export async function updateAllItemStats() {
     acc[entry.itemId].push(entry.price);
     return acc;
   }, {} as Record<string, number[]>);
-  console.log('[itemStats] grouped priceHistory by itemId:', grouped);
+  // console.log('[itemStats] grouped priceHistory by itemId:', grouped);
 
   for (const [itemId, prices] of Object.entries(grouped)) {
     if (!Array.isArray(prices) || !prices.length) continue;
     const existing = currentStatsMap.get(itemId);
     const lastUpdated = existing?.updatedAt ? existing.updatedAt.slice(0, 10) : null;
     if (lastUpdated === todayStr) {
-      console.log(`[itemStats] Skipping ${itemId} (already updated today)`);
+      // console.log(`[itemStats] Skipping ${itemId} (already updated today)`);
       continue; // Already updated today
     }
     const sorted = prices.slice().sort((a: number, b: number) => a - b);
@@ -339,13 +366,13 @@ export async function updateAllItemStats() {
       p75,
       updatedAt: new Date().toISOString(),
     };
-    console.log(`[itemStats] Upserting for ${itemId}:`, upserted);
+    // console.log(`[itemStats] Upserting for ${itemId}:`, upserted);
     await db.itemStats.upsert(upserted);
   }
 
   // Log after update
   const afterStatsArr = await db.itemStats.find().exec();
-  console.log('[itemStats] itemStats after update:', afterStatsArr.length, afterStatsArr);
+  // console.log('[itemStats] itemStats after update:', afterStatsArr.length, afterStatsArr);
 }
 
 function percentile(arr: number[], p: number): number | null {
@@ -372,6 +399,27 @@ getDb().then(db => {
 
 // --- Appwrite Realtime subscription for RxDB sync ---
 import { client } from './lib/appwrite';
+
+// --- Explicit type for inventory item ---
+type ItemType = {
+  id: string;
+  name: string;
+  price: number;
+  owned?: boolean | null;
+  notes?: string | null;
+  p0?: number | null;
+  p25?: number | null;
+  p50?: number | null;
+  p75?: number | null;
+  p100?: number | null;
+  mean?: number | null;
+  std?: number | null;
+  search_results_captured?: number | null;
+  sum_bundle?: number | null;
+  num_outlier?: number | null;
+  search_item_timestamp?: string | null;
+  added_to_shop_at?: string | null;
+};
 
 export function subscribeToAppwriteRealtimeForItems() {
   const databaseId = import.meta.env.VITE_APPWRITE_DATABASE!;
@@ -401,7 +449,17 @@ export function subscribeToAppwriteRealtimeForItems() {
           num_outlier,
           search_item_timestamp
         } = payload;
-        const item = {
+        const itemId = $id;
+        // Merge local-only fields (e.g., added_to_shop_at) from existing doc
+        let localFields: Partial<ItemType> = {};
+        const existingDoc = await db.items.findOne(itemId).exec();
+        if (existingDoc) {
+          const localJson = existingDoc.toJSON();
+          if ('added_to_shop_at' in localJson) {
+            localFields.added_to_shop_at = localJson.added_to_shop_at;
+          }
+        }
+        const item: ItemType = {
           id: $id,
           name,
           price,
@@ -411,7 +469,8 @@ export function subscribeToAppwriteRealtimeForItems() {
           search_results_captured,
           sum_bundle,
           num_outlier,
-          search_item_timestamp
+          search_item_timestamp,
+          ...localFields
         };
         if (db.items && typeof db.items.upsert === 'function') {
           await db.items.upsert(item);

@@ -14,7 +14,7 @@ interface StockModalProps {
   characters: Character[];
   selectedCharacterId: string | null;
   setToast: (toast: { msg: string; visible: boolean }) => void;
-  onAddToStore?: (characterId: string, itemId: string, amount: number, pStats?: {
+  onAddToStore?: (characterId: string, itemId: string, pStats?: {
     mean?: number;
     std?: number;
     p0?: number;
@@ -29,7 +29,6 @@ interface StockModalProps {
     price?: number;
   }) => void;
   onRemoveFromStore?: (characterId: string, itemId: string) => void;
-  onSetStock?: (characterId: string, itemId: string, amount: number) => void;
   handleChangePrice: (itemId: string, newPrice: number, notes?: string, isSale?: boolean, itemName?: string) => Promise<void>;
   priceHistoryData: any; // Add this prop
 }
@@ -46,24 +45,19 @@ export function StockModal({
   setToast,
   onAddToStore,
   onRemoveFromStore,
-  // onSetStock,
   handleChangePrice,
   // priceHistoryData, // Add this prop
 }: StockModalProps) {
   // Default to selected character or first
   const [characterId, setCharacterId] = useState<string>(selectedCharacterId || characters[0]?.id || "");
-  const [amount, setAmount] = useState<number>(1);
   const [changePriceOpen, setChangePriceOpen] = useState(false);
   const [latestPrice, setLatestPrice] = useState<number | null>(null);
   const [alreadyLogged24h, setAlreadyLogged24h] = useState(false);
   const [showSaleWarning, setShowSaleWarning] = useState(false);
   const persistentUserId = typeof window !== 'undefined' ? localStorage.getItem('persistentUserId') : null;
-  // const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     setCharacterId(selectedCharacterId || characters[0]?.id || "");
-    setAmount(1);
-    console.log('item:', item);
   }, [open, selectedCharacterId, itemId, userPriceMap, characters]);
 
   useEffect(() => {
@@ -136,9 +130,6 @@ export function StockModal({
       if (e.key.toLowerCase() === 'q') {
         e.preventDefault();
         handleQuickSell();
-      } else if (e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        handleAddToStore();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -165,21 +156,7 @@ export function StockModal({
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, handleQuickSell, handleAddToStore, onClose]);
-
-  // --- Amount input ref for autofocus ---
-  const amountInputRef = React.useRef<HTMLInputElement>(null);
-  const prevOpenRef = React.useRef<boolean>(false);
-
-  useEffect(() => {
-    if (open && !prevOpenRef.current) {
-      // Only autofocus when modal just opened
-      setTimeout(() => {
-        amountInputRef.current?.focus();
-      }, 0);
-    }
-    prevOpenRef.current = open;
-  }, [open]);
+  }, [open, handleQuickSell, onClose]);
 
   // --- Handlers ---
   async function handleQuickSell() {
@@ -201,7 +178,7 @@ export function StockModal({
     }
     try {
       await handleChangePrice(itemId, latestPrice || 0, undefined, true, itemName);
-      setToast({ msg: `Quick sale logged for ${amount}x ${itemName} at ${(latestPrice || 0).toLocaleString()} mesos.`, visible: true });
+      setToast({ msg: `Quick sale logged for ${itemName} at ${(latestPrice || 0).toLocaleString()} mesos.`, visible: true });
     } catch (err) {
       setToast({ msg: `Failed to log sale: ${err instanceof Error ? err.message : String(err)}`, visible: true });
     }
@@ -213,26 +190,46 @@ export function StockModal({
     setShowSaleWarning(false);
   }
 
+  // --- LocalStorage persist function for addedToShopAt, character-specific and multi-item aware ---
+  function persistAddedToShopAt(characterId: string, itemId: string, timestamp: string | null) {
+    let stored: Record<string, Record<string, (string | null)[]>> = {};
+    try {
+      stored = JSON.parse(localStorage.getItem('addedToShopAtMap') || '{}');
+    } catch {}
+    if (!stored[characterId]) stored[characterId] = {};
+    if (!stored[characterId][itemId]) stored[characterId][itemId] = [];
+    // Only add if not already present (for unique timestamps)
+    if (!stored[characterId][itemId].includes(timestamp)) {
+      stored[characterId][itemId].push(timestamp);
+    }
+    localStorage.setItem('addedToShopAtMap', JSON.stringify(stored));
+  }
+
   function handleAddToStore() {
     if (onAddToStore) {
       if (item) {
         const {
           mean, std, p0, p25, p50, p75, p100, num_outlier, sum_bundle,
-          search_item_timestamp, search_results_captured, price
+          search_item_timestamp, search_results_captured
         } = item;
         if (!item.added_to_shop_at) {
-          item.added_to_shop_at = new Date().toISOString();
+          const now = new Date().toISOString();
+          item.added_to_shop_at = now;
+          // persist all additions, even if same itemId for different characters
+          if (selectedCharacterId) {
+            persistAddedToShopAt(selectedCharacterId, item.$id, now);
+          }
         }
-        onAddToStore(characterId, itemId, amount, {
+        onAddToStore(characterId, item.$id, {
           mean, std, p0, p25, p50, p75, p100, num_outlier, sum_bundle,
-          search_item_timestamp: search_item_timestamp ?? undefined, search_results_captured, price
+          search_item_timestamp: search_item_timestamp ?? undefined, search_results_captured
         });
       } else {
-        onAddToStore(characterId, itemId, amount);
+        onAddToStore(characterId, itemId);
       }
       return;
     }
-    setToast({ msg: `${amount}x ${itemName} added to store.`, visible: true });
+    setToast({ msg: `${itemName} added to store.`, visible: true });
     onClose();
   }
 
@@ -244,10 +241,6 @@ export function StockModal({
       return;
     }
     setToast({ msg: `Item not found in store.`, visible: true });
-  }
-
-  function adjustAmount(val: number) {
-    setAmount(a => Math.max(1, a + val));
   }
 
   if (!open) return null;
@@ -276,7 +269,7 @@ export function StockModal({
         ref={modalRef}
         style={{
           width: 600,
-          height: 400,
+          height: 300,
           background: '#232b3c',
           borderRadius: 16,
           boxShadow: '0 2px 24px #0006',
@@ -291,7 +284,7 @@ export function StockModal({
         onClick={e => e.stopPropagation()}
       >
         <div style={{display:'flex',alignItems:'center',gap:12,justifyContent:'center',width:'100%', marginBottom: 18}}>
-          <span style={{fontSize:22,fontWeight:700,letterSpacing:0.1}}>Stock / Quick Sell</span>
+          <span style={{fontSize:22,fontWeight:700,letterSpacing:0.1}}>Quick Sell / Price Change</span>
           <span style={{color:'#a88f4a',fontWeight:600,fontSize:16,background:'#2d2d2d',borderRadius:6,padding:'3px 10px'}}>{itemName}</span>
         </div>
         <div style={{width:inputWidth,display:'flex',flexDirection:'column',alignItems:'center',padding:'0 0 6px 0'}}>
@@ -299,24 +292,6 @@ export function StockModal({
           <select value={characterId} onChange={e => setCharacterId(e.target.value)} style={{ width: inputWidth, fontSize: 16, padding: '10px 12px', borderRadius: 8, border: '1.5px solid #444', background: '#18191c', color: '#fff', fontWeight: 500, textAlign:'center' }}>
             {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-        </div>
-        <div style={{ width:inputWidth,display:'flex',flexDirection:'column',alignItems:'center',padding:'0 0 6px 0' }}>
-          <label style={{ fontWeight: 600, fontSize: 15, marginBottom: 6, color: '#e0c080', textAlign:'center' }}>Amount</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#232323', borderRadius: 8, padding: '2px 8px', border: '1.5px solid #444', justifyContent:'center', width: inputWidth }}>
-            <button type="button" onClick={() => adjustAmount(-5)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>-5</button>
-            <button type="button" onClick={() => adjustAmount(-1)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>-1</button>
-            <input
-              type="number"
-              min={1}
-              value={amount}
-              onChange={e => setAmount(Math.max(1, Number(e.target.value)))}
-              style={{ width: 50, fontSize: 15, padding: '6px 0', border: 'none', background: 'transparent', color: '#fff', textAlign: 'center', fontWeight: 600, outline: 0 }}
-              ref={amountInputRef}
-              autoFocus
-            />
-            <button type="button" onClick={() => adjustAmount(1)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>+1</button>
-            <button type="button" onClick={() => adjustAmount(5)} style={{ background: 'none', border: 'none', color: '#2d8cff', fontSize: 17, fontWeight: 700, cursor: 'pointer', padding: '2px 8px', borderRadius: 6, transition: 'background 0.15s' }}>+5</button>
-          </div>
         </div>
         <div style={{ width:inputWidth,display:'flex',flexDirection:'column',alignItems:'center',padding:'0 0 6px 0' }}>
           <label style={{ fontWeight: 600, fontSize: 15, marginBottom: 6, color: '#e0c080', textAlign:'center' }}>Sell Price (mesos)</label>
@@ -347,7 +322,7 @@ export function StockModal({
           >
             Log Quick Sell <span style={{fontSize:13,marginLeft:6,opacity:0.7}}>(Q)</span>
           </button>
-          <button onClick={handleAddToStore} style={{ background: 'linear-gradient(90deg,#a87e2f,#ffd27a)', border: 'none', color: '#232323', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #a87e2f22', transition: 'background 0.15s', margin: 0 }}>Add to Store <span style={{fontSize:13,marginLeft:6,opacity:0.7}}>(S)</span></button>
+          <button onClick={handleAddToStore} style={{ background: 'linear-gradient(90deg,#a87e2f,#ffd27a)', border: 'none', color: '#232323', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #a87e2f22', transition: 'background 0.15s', margin: 0 }}>Add to Store</button>
           <button onClick={() => setChangePriceOpen(true)} style={{ background: 'linear-gradient(90deg,#2d8cff,#5fcfff)', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 20px', fontSize: 15, cursor: 'pointer', fontWeight: 700, boxShadow: '0 2px 8px #2d8cff22', transition: 'background 0.15s', margin: 0 }}>Change Price</button>
           <button onClick={handleRemoveFromStore} style={{ background: 'none', border: '1.5px solid #e74c3c', color: '#e74c3c', borderRadius: 8, padding: '8px 14px', fontSize: 14, cursor: 'pointer', fontWeight: 700, transition: 'background 0.15s, color 0.15s', margin: 0 }}>Remove from Store</button>
         </div>

@@ -1,26 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { getPersistentAnonUserById } from '../api/persistentAnon';
 
 export function useUserKarma(userId: string) {
   const [karma, setKarma] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
-    let cancelled = false;
-    async function fetchKarma() {
-      const user = await getPersistentAnonUserById(userId);
-      if (!cancelled) {
-        setKarma(user.karma ?? 0);
-        setLoading(false);
-      }
-    }
-    fetchKarma();
-    const interval = setInterval(fetchKarma, 2000); // Poll every 2s for updates
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    const user = await getPersistentAnonUserById(userId);
+    setKarma(user?.karma ?? 0);
+    setLoading(false);
   }, [userId]);
-  return { karma, loading };
+
+  return { karma, loading, refresh };
 }

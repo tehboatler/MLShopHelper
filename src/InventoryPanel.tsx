@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DroppableStateSnapshot, DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dnd';
 import type { Character } from "./types";
 import { CharacterDropdown } from "./CharacterDropdown";
 import { NameInputModal } from "./NameInputModal";
 import { ShopTimerModal } from "./ShopTimerModal";
-import { InstantTooltip } from "./InstantTooltip";
+import { InstantTooltip, useCharacterAddedToShopAt } from "./InstantTooltip";
 import { useRecentPriceHistoryMap } from './hooks/useRecentPriceHistoryMap';
+import { Spinner } from "./components/Spinner";
 
 interface InventoryPanelProps {
   characters: Character[];
@@ -24,6 +25,8 @@ interface InventoryPanelProps {
   handleOpenStockDialog: (id: string) => void;
   onRemoveFromStore: (characterId: string, itemId: string) => void;
   onItemSelected?: (itemName: string) => void;
+  setSearch?: (v: string) => void;
+  loading?: boolean;
 }
 
 export const InventoryPanel: React.FC<InventoryPanelProps> = ({
@@ -38,12 +41,15 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   setToast,
   toastTimeoutRef,
   setInventoryContextMenu,
-  // getLastUserPriceEntry,
+  getLastUserPriceEntry,
   selectedCharacter,
   handleOpenStockDialog,
-  // onRemoveFromStore,
+  onRemoveFromStore,
   onItemSelected,
+  setSearch,
+  loading = false,
 }) => {
+  // console.log('[InventoryPanel] loading:', loading);
   const [addModalOpen, setAddModalOpen] = React.useState(false);
   const [shopTimerModalOpen, setShopTimerModalOpen] = React.useState(false);
   const [shopCloseTime, setShopCloseTime] = React.useState<Date | null>(null);
@@ -53,6 +59,12 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
   const statOptions = ["p0", "p25", "p50", "p75", "p100"] as const;
   type StatKey = typeof statOptions[number];
   const [selectedStat, setSelectedStat] = React.useState<StatKey>("p50");
+
+  // Add sort by price state and UI
+  const [sortByPrice, setSortByPrice] = React.useState<'none' | 'asc' | 'desc'>('none');
+
+  // --- Add selection state for clicked item ---
+  const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null);
 
   // Merge localStorage info into itemMap for display
   const getMergedItemMap = () => {
@@ -74,6 +86,34 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 
   const itemIds = Object.keys(mergedItemMap);
   const recentPricesMap = useRecentPriceHistoryMap(itemIds, persistentUserId, 3);
+
+  // --- LocalStorage-based addedToShopAtMap, character-specific ---
+  function useAddedToShopAtMap(itemIds: string[], characterId: string | undefined, itemsLoaded: boolean) {
+    const [map, setMap] = useState<Record<string, string | null>>({});
+    useEffect(() => {
+      if (!itemsLoaded || !characterId) {
+        setMap({});
+        return;
+      }
+      let stored: Record<string, Record<string, string | null>> = {};
+      try {
+        stored = JSON.parse(localStorage.getItem('addedToShopAtMap') || '{}');
+      } catch {}
+      const charMap = stored[characterId] || {};
+      const newMap: Record<string, string | null> = {};
+      for (const itemId of itemIds) {
+        newMap[itemId] = charMap[itemId] ?? null;
+      }
+      setMap(newMap);
+    }, [itemsLoaded, characterId, JSON.stringify(itemIds)]);
+    return map;
+  }
+
+  // Assume itemsLoaded is true when mergedItemMap is non-empty
+  const itemsLoaded = Object.keys(mergedItemMap).length > 0;
+  // Ensure selectedCharacterId is string | undefined (never null)
+  const safeCharacterId = selectedCharacterId === null ? undefined : selectedCharacterId;
+  const addedToShopAtMap = useAddedToShopAtMap(itemIds, safeCharacterId, itemsLoaded);
 
   // --- Highlighted item state for click effect ---
   const [clickedItemId, setClickedItemId] = React.useState<string | null>(null);
@@ -166,17 +206,46 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
     return 'now';
   }
 
+  // In the render of selectedCharacter.shop.order, apply sorting if needed
+  const orderedItemIds = React.useMemo(() => {
+    if (!selectedCharacter?.shop?.order) return [];
+    if (sortByPrice === 'none') return selectedCharacter.shop.order;
+    // Build price map for all items
+    const priceMap: Record<string, number> = {};
+    for (const itemId of selectedCharacter.shop.order) {
+      const item = mergedItemMap[itemId];
+      let price = 0;
+      try {
+        const localItems = JSON.parse(localStorage.getItem('localItems') || '[]');
+        const localItem = localItems.find((i: any) => i.$id === item?.$id);
+        price = typeof localItem?.current_selling_price === 'number' ? localItem.current_selling_price : 0;
+      } catch {}
+      if (userPriceMap instanceof Map && userPriceMap.get(itemId) && typeof userPriceMap.get(itemId).price === 'number') {
+        price = userPriceMap.get(itemId).price;
+      } else if (userPriceMap && typeof userPriceMap[itemId]?.price === 'number') {
+        price = userPriceMap[itemId].price;
+      } else if (!price && typeof item?.current_selling_price === 'number') {
+        price = item.current_selling_price;
+      }
+      priceMap[itemId] = price;
+    }
+    return [...selectedCharacter.shop.order].sort((a, b) => {
+      const pa = priceMap[a] ?? 0;
+      const pb = priceMap[b] ?? 0;
+      return sortByPrice === 'asc' ? pa - pb : pb - pa;
+    });
+  }, [selectedCharacter, mergedItemMap, userPriceMap, sortByPrice]);
+
   return (
     <aside
       className="inventory-panel-scroll"
       style={{
-        width: 270,
+        height: '100%',
         minWidth: 230,
         maxWidth: 340,
         background: '#232323',
         borderRight: '1.5px solid #333',
         padding: '24px 14px 24px 18px',
-        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -245,44 +314,100 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
       {/* Total Sale Value Label */}
       {/* Removed as per user request */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <label htmlFor="stat-select" style={{ color: '#e0c080', fontWeight: 500, fontSize: 15 }}>Stat:</label>
+      {/* Combined Stat and Sort Dropdowns Row */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 12,
+        background: 'rgba(224,192,128,0.06)',
+        borderRadius: 8,
+        padding: '4px 10px',
+        boxShadow: '0 1px 6px #0001',
+      }}>
         <select
           id="stat-select"
           value={selectedStat}
           onChange={e => setSelectedStat(e.target.value as StatKey)}
-          style={{ fontSize: 15, padding: '2px 8px', borderRadius: 6, border: '1.5px solid #e0c080', background: '#232323', color: '#e0c080' }}
+          style={{
+            fontSize: 15,
+            padding: '2px 10px',
+            borderRadius: 6,
+            border: '1.5px solid #e0c080',
+            background: '#232323',
+            color: '#e0c080',
+            fontWeight: 600,
+            outline: 'none',
+            minWidth: 70,
+            marginRight: 2,
+          }}
+          title="Stat"
         >
           {statOptions.map(opt => (
             <option key={opt} value={opt}>{opt.toUpperCase()}</option>
           ))}
         </select>
+        <select
+          id="sort-price-select"
+          value={sortByPrice}
+          onChange={e => setSortByPrice(e.target.value as 'none' | 'asc' | 'desc')}
+          style={{
+            fontSize: 15,
+            padding: '2px 10px',
+            borderRadius: 6,
+            border: '1.5px solid #e0c080',
+            background: '#232323',
+            color: '#e0c080',
+            fontWeight: 600,
+            outline: 'none',
+            minWidth: 90,
+          }}
+          title="Sort by Price"
+        >
+          <option value="none">Sort</option>
+          <option value="asc">Price ↑</option>
+          <option value="desc">Price ↓</option>
+        </select>
       </div>
       <div
         className="inventory-scrollbar-hide"
         style={{
-          overflowY: 'auto',
-          height: 'calc(100vh - 70px - 48px - 38px)',
-          minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 6,
           background: '#232323',
           boxShadow: '0 2px 8px #0002',
           padding: '2px 0',
+          overflow: 'visible', // Ensure parent is not scrollable
         }}
       >
-        {selectedCharacter && selectedCharacter.shop ? (
+        {loading ? (
+          <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 180 }}>
+            <Spinner size={36} />
+          </div>
+        ) : selectedCharacter && selectedCharacter.shop ? (
           Array.isArray(selectedCharacter.shop.order) ? (
             <DragDropContext onDragEnd={handleInventoryDragEnd}>
               <Droppable droppableId="shop-inventory" type="item">
                 {(provided: DroppableProvided, _: DroppableStateSnapshot) => (
-                  <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'block', gap: 8, minHeight: 40, paddingBottom: 0 }}>
-                    {selectedCharacter.shop.order.map((itemId: string, idx: number) => {
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className="no-scrollbar"
+                    style={{
+                      overflowY: 'auto',
+                      height: 'calc(100vh - 70px - 48px - 38px + 32px)',
+                      minHeight: 0,
+                      display: 'block',
+                      gap: 8,
+                      paddingBottom: 32, // Enough for drag handle and spacing
+                    }}
+                  >
+                    {orderedItemIds.map((itemId: string, idx: number) => {
                       const item = mergedItemMap[itemId];
                       if (!item) return null;
-                      const count = selectedCharacter.shop.itemCounts[itemId] || 0;
-                      const safeCount = typeof count === 'number' && !isNaN(count) ? count : 0;
+                      const isLast = idx === orderedItemIds.length - 1;
+                      const isSelected = selectedItemId === item.$id;
                       // --- Always prefer userPriceMap (Map) if available, then local, then default ---
                       let price = 0;
                       try {
@@ -298,6 +423,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                         price = item.current_selling_price;
                       }
                       const recentPrices = recentPricesMap[item.$id] || [];
+                      const charAddedToShopAt = useCharacterAddedToShopAt(item.$id, selectedCharacterId ?? undefined);
                       return (
                         <React.Fragment key={item.$id}>
                           <Draggable key={item.$id} draggableId={item.$id} index={idx}>
@@ -306,132 +432,129 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                  background: snapshot.isDragging ? '#232323' : (clickedItemId === item.$id ? 'rgba(60, 120, 255, 0.18)' : 'transparent'),
-                                  borderRadius: 8,
-                                  boxShadow: snapshot.isDragging ? '0 2px 12px #0008' : undefined,
-                                  border: snapshot.isDragging ? '1.5px solid #2d8cff' : undefined,
-                                  padding: '7px 8px',
-                                  marginBottom: 1,
-                                  transition: 'background 1.2s cubic-bezier(.7,0,.3,1), box-shadow 0.15s, border 0.15s',
-                                  cursor: 'grab',
-                                  ...provided.draggableProps.style,
-                                }}
-                                onClick={() => {
-                                  if (onItemSelected) onItemSelected(item.name);
-                                  setClickedItemId(item.$id);
-                                  if (fadeTimeout.current) clearTimeout(fadeTimeout.current);
-                                  fadeTimeout.current = setTimeout(() => setClickedItemId(null), 10000);
+                                onClick={async () => {
+                                  setSelectedItemId(item.$id);
+                                  if (setSearch) setSearch(item.name);
                                   if (typeof price === 'number' && price > 0) {
-                                    navigator.clipboard.writeText(price.toString());
-                                    setToast({ msg: `Copied price: ${price.toLocaleString()} mesos`, visible: true });
-                                    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-                                    toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
+                                    try {
+                                      await navigator.clipboard.writeText(String(price));
+                                      setToast && setToast({ msg: `Copied ${price.toLocaleString()} mesos to clipboard.`, visible: true });
+                                    } catch (err) {
+                                      setToast && setToast({ msg: `Failed to copy price.`, visible: true });
+                                    }
                                   }
                                 }}
-                                onDoubleClick={() => {
-                                  navigator.clipboard.writeText(item.name);
-                                  setToast({ msg: `Copied ${item.name}`, visible: true });
-                                  if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-                                  toastTimeoutRef.current = setTimeout(() => setToast({ msg: '', visible: false }), 1700);
-                                }}
-                                onContextMenu={e => {
-                                  e.preventDefault();
-                                  setInventoryContextMenu({ open: true, x: e.clientX, y: e.clientY, itemId: item.$id });
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  marginBottom: isLast && !snapshot.isDragging ? 128 : 0,
+                                  background: isSelected ? 'rgba(45,140,255,0.18)' : (snapshot.isDragging ? '#232323' : (clickedItemId === item.$id ? 'rgba(60, 120, 255, 0.18)' : 'transparent')),
+                                  border: isSelected ? '2px solid #2d8cff' : (snapshot.isDragging ? '1.5px solid #2d8cff' : undefined),
+                                  borderRadius: 8,
+                                  transition: 'background 0.18s, border 0.18s',
+                                  cursor: 'grab',
                                 }}
                               >
-                                <InstantTooltip
-                                  content={(() => {
-                                    let tooltip = '';
-                                    if (item.added_to_shop_at) {
-                                      tooltip += `Added to shop: ${formatRelativeDate(item.added_to_shop_at)}\n`;
-                                    }
-                                    if (recentPrices.length > 0) {
-                                      tooltip += 'Recent prices:\n';
-                                      recentPrices.forEach((entry, idx) => {
-                                        const priceStr = typeof entry.price === 'number' ? entry.price.toLocaleString() : String(entry.price);
-                                        tooltip += `${formatRelativeDate(entry.date)}: ${priceStr} mesos`;
-                                        if (idx < recentPrices.length - 1) tooltip += '\n';
-                                      });
-                                    }
-                                    return tooltip.trim() || undefined;
-                                  })()}
-                                >
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-                                    <span style={{ fontWeight: 600, wordBreak: 'break-word', whiteSpace: 'normal', fontSize: 16, lineHeight: 1.18 }}>{item.name}</span>
-                                    <span style={{ color: '#a88f4a', fontWeight: 500, fontSize: 13, marginTop: 2, whiteSpace: 'pre-line' }}>
-                                      {typeof price === 'number' && price > 0
-                                        ? `${price.toLocaleString()} mesos${safeCount > 0 ? `\n(${(safeCount*price).toLocaleString()} total)` : ''}`
-                                        : <span style={{color:'#e74c3c'}}>No price</span>}
-                                    </span>
-                                    {/* Stat and % diff display only */}
-                                    <span style={{ color: '#2d8cff', fontSize: 13, fontWeight: 600, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                      {(() => {
-                                        // Find stat value from item only (no more localStorage)
-                                        let statValue: number | undefined = undefined;
-                                        if (statValue === undefined && typeof item[selectedStat] === 'number') statValue = item[selectedStat];
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', boxShadow: snapshot.isDragging ? '0 2px 12px #0008' : undefined }}>
+                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                                      <InstantTooltip
+                                        content={(() => {
+                                          let tooltip = '';
+                                          if (charAddedToShopAt) {
+                                            tooltip += `Added to shop: ${formatRelativeDate(charAddedToShopAt)}\n`;
+                                          }
+                                          if (recentPrices.length > 0) {
+                                            tooltip += 'Recent prices:\n';
+                                            recentPrices.forEach((entry, idx) => {
+                                              const priceStr = typeof entry.price === 'number' ? entry.price.toLocaleString() : String(entry.price);
+                                              tooltip += `${formatRelativeDate(entry.date)}: ${priceStr} mesos`;
+                                              if (idx < recentPrices.length - 1) tooltip += '\n';
+                                            });
+                                          }
+                                          return tooltip.trim();
+                                        })()}
+                                      >
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                                          <span style={{ fontWeight: 600, wordBreak: 'break-word', whiteSpace: 'normal', fontSize: 16, lineHeight: 1.18 }}>{item.name}</span>
+                                          <span style={{ color: '#a88f4a', fontWeight: 500, fontSize: 13, marginTop: 2, whiteSpace: 'pre-line' }}>
+                                            {typeof price === 'number' && price > 0
+                                              ? `${price.toLocaleString()} mesos`
+                                              : <span style={{color:'#e74c3c'}}>No price</span>}
+                                          </span>
+                                          {/* Stat and % diff display only */}
+                                          <span style={{ color: '#2d8cff', fontSize: 13, fontWeight: 600, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                            {(() => {
+                                              let statValue: number | undefined = undefined;
+                                              if (statValue === undefined && typeof item[selectedStat] === 'number') statValue = item[selectedStat];
 
-                                        // --- Stat diff display ---
-                                        let statDiffNode = null;
-                                        if (typeof statValue === 'number' && typeof price === 'number' && price > 0) {
-                                          const diff = ((price - statValue) / statValue) * 100;
-                                          const diffStr = diff > 0 ? `+${diff.toFixed(1)}%` : `${diff.toFixed(1)}%`;
-                                          const diffColor = diff > 0 ? '#2ecc40' : (diff < 0 ? '#e74c3c' : '#aaa');
-                                          statDiffNode = (
-                                            <>
-                                              {`${selectedStat.toUpperCase()}: ${statValue.toLocaleString()} (`}
-                                              <span style={{ color: diffColor }}>{diffStr}</span>
-                                              {`)`}
-                                            </>
-                                          );
-                                        } else if (typeof statValue === 'number') {
-                                          statDiffNode = `${selectedStat.toUpperCase()}: ${statValue.toLocaleString()}`;
-                                        } else {
-                                          statDiffNode = `${selectedStat.toUpperCase()}: N/A`;
-                                        }
+                                              let statDiffNode = null;
+                                              if (typeof statValue === 'number' && typeof price === 'number' && price > 0) {
+                                                const diff = ((price - statValue) / statValue) * 100;
+                                                const diffStr = diff > 0 ? `+${diff.toFixed(1)}%` : `${diff.toFixed(1)}%`;
+                                                const diffColor = diff > 0 ? '#2ecc40' : (diff < 0 ? '#e74c3c' : '#aaa');
+                                                statDiffNode = (
+                                                  <>
+                                                    {`${selectedStat.toUpperCase()}: ${statValue.toLocaleString()} (`}
+                                                    <span style={{ color: diffColor }}>{diffStr}</span>
+                                                    {`)`}
+                                                  </>
+                                                );
+                                              } else if (typeof statValue === 'number') {
+                                                statDiffNode = `${selectedStat.toUpperCase()}: ${statValue.toLocaleString()}`;
+                                              } else {
+                                                statDiffNode = `${selectedStat.toUpperCase()}: N/A`;
+                                              }
 
-                                        // --- Render compact info block (no price change/time info) ---
-                                        return (
-                                          <>
-                                            <span>{statDiffNode}</span>
-                                          </>
-                                        );
-                                      })()}
+                                              return (
+                                                <>
+                                                  <span>{statDiffNode}</span>
+                                                  <span style={{ color: '#b3b3b3', fontSize: 12, fontWeight: 400, marginTop: 2 }}>
+                                                    {item.search_item_timestamp
+                                                      ? `OwlRepo 🔛 ${formatRelativeDate(item.search_item_timestamp)}`
+                                                      : ''}
+                                                  </span>
+                                                </>
+                                              );
+                                            })()}
+                                          </span>
+                                        </div>
+                                      </InstantTooltip>
+                                    </div>
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginLeft: 10,
+                                        width: 32,
+                                        height: 32,
+                                        aspectRatio: '1 / 1',
+                                        borderRadius: 999,
+                                        background: 'linear-gradient(90deg, #f8ecd5 0%, #e7c873 50%, #a86e2f 100%)',
+                                        boxShadow: '0 2px 8px #0002',
+                                        border: '1.5px solid #e0c08080',
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                        transition: 'background 0.15s',
+                                      }}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        handleOpenStockDialog(item.$id);
+                                      }}
+                                      title="Adjust stock"
+                                    >
+                                      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect y="4" width="20" height="2.5" rx="1.25" fill="#a86e2f" />
+                                        <rect y="8.75" width="20" height="2.5" rx="1.25" fill="#a86e2f" />
+                                        <rect y="13.5" width="20" height="2.5" rx="1.25" fill="#a86e2f" />
+                                      </svg>
                                     </span>
                                   </div>
-                                </InstantTooltip>
-                                <span
-                                  style={{
-                                    color: 'rgba(60,40,16,0.92)',
-                                    background: 'linear-gradient(90deg, #f8ecd5 0%, #e7c873 50%, #a86e2f 100%)',
-                                    borderRadius: 999,
-                                    padding: '3px 14px',
-                                    marginLeft: 10,
-                                    fontWeight: 700,
-                                    fontSize: 15,
-                                    minWidth: 32,
-                                    textAlign: 'center',
-                                    boxShadow: '0 2px 8px #0002',
-                                    border: '1.5px solid #e0c08080',
-                                    lineHeight: 1.25,
-                                    display: 'inline-block',
-                                    filter: 'drop-shadow(0 1px 2px #fff6) drop-shadow(0 -1px 2px #bfa16a44)',
-                                    cursor: 'pointer',
-                                    userSelect: 'none',
-                                  }}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    handleOpenStockDialog(item.$id);
-                                  }}
-                                  title="Adjust stock"
-                                >{safeCount}x</span>
+                                </div>
                               </div>
                             )}
                           </Draggable>
-                          {idx < selectedCharacter.shop.order.length - 1 && (
+                          {idx < orderedItemIds.length - 1 && (
                             <div style={{height:1, background:'linear-gradient(90deg,#3a3a3a 0%,#2d8cff44 100%)', margin:'6px 2px 6px 10px', borderRadius:1}} />
                           )}
                         </React.Fragment>
@@ -473,4 +596,3 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
 }
 
 export default InventoryPanel;
-// Removed <style> tag with button CSS. Please see App.css for styles.

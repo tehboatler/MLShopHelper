@@ -13,18 +13,36 @@ export function useRxdbItems(isAuthenticated: boolean = true): [Item[], boolean]
       return;
     }
     let sub: any;
+    setLoading(true); 
+    console.log('[useRxdbItems] setLoading(true) on effect run');
+    let loadingStopped = false;
     getDb().then(db => {
       sub = db.items.find().$.subscribe(docs => {
-        console.debug('[useRxdbItems] RxDB emission:', docs.map(doc => doc.toJSON()));
-        setItems(docs.map(doc => {
+        const items = docs.map(doc => {
           const json = doc.toJSON();
-          // Always provide $id for UI/types compatibility (copy to new object to avoid mutation error)
           return json.$id ? json : { ...json, $id: json.id };
-        }));
-        setLoading(false);
+        });
+        setItems(items);
+        // Only stop loading when we have items, or after timeout
+        if (!loadingStopped && items.length > 0) {
+          setLoading(false);
+          loadingStopped = true;
+          console.log('[useRxdbItems] setLoading(false) after RxDB emits items');
+        }
       });
     });
-    return () => sub && sub.unsubscribe();
+    // Fallback: after 5 seconds, stop loading even if no items
+    const timeout = setTimeout(() => {
+      if (!loadingStopped) {
+        setLoading(false);
+        loadingStopped = true;
+        console.log('[useRxdbItems] setLoading(false) after timeout');
+      }
+    }, 5000);
+    return () => {
+      sub && sub.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [isAuthenticated]);
   return [items, loading];
 }

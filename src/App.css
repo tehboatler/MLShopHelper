@@ -495,6 +495,14 @@ input:focus, button:focus {
   background: transparent;
 }
 
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
 @media (max-width: 700px) {
   .modal-content {
     padding: 16px 2vw 14px 2vw;
@@ -640,4 +648,9 @@ html, body, #root, .App, * {
     'opsz' 48;
   user-select: none;
   pointer-events: none;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }

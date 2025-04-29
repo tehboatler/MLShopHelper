@@ -5,6 +5,22 @@ interface InstantTooltipProps {
   children: React.ReactNode;
 }
 
+// --- Character-specific addedToShopAtMap hook for tooltips (multi-item aware) ---
+export function useCharacterAddedToShopAt(itemId: string, characterId: string | undefined): string | null {
+  if (!characterId) return null;
+  let stored: Record<string, Record<string, (string | null)[]>> = {};
+  try {
+    stored = JSON.parse(localStorage.getItem('addedToShopAtMap') || '{}');
+  } catch {}
+  const arr = stored[characterId]?.[itemId];
+  // Return the latest timestamp if exists
+  if (Array.isArray(arr) && arr.length > 0) {
+    // Sort and return the most recent ISO string
+    return arr.slice().sort().reverse()[0] || null;
+  }
+  return null;
+}
+
 export const InstantTooltip: React.FC<InstantTooltipProps> = ({ content, children }) => {
   const [visible, setVisible] = React.useState(false);
   const [coords, setCoords] = React.useState<{ x: number; y: number }>({ x: 0, y: 0 });

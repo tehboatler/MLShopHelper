@@ -426,7 +426,7 @@ export const InventoryPanel: React.FC<InventoryPanelProps> = ({
                       const charAddedToShopAt = useCharacterAddedToShopAt(item.$id, selectedCharacterId ?? undefined);
                       return (
                         <React.Fragment key={item.$id}>
-                          <Draggable key={item.$id} draggableId={item.$id} index={idx}>
+                          <Draggable key={item.$id} draggableId={item.$id} index={idx} isDragDisabled={true}>
                             {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                               <div
                                 ref={provided.innerRef}

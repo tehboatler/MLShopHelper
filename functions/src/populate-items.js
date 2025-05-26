@@ -86,7 +86,8 @@ export default async ({ req, res, log, error }) => {
     log(`[populate-items] Existing map keys: ${Object.keys(existingMap).length}`);
 
     // Helper for concurrency-limited batch processing with optional delay between batches
-    async function batchProcess(items, handler, limit = 3, delayMs = 500) {
+    // Optimized for Appwrite Server SDK: high concurrency, no artificial delay
+async function batchProcess(items, handler, limit = 8, delayMs = 0) {
       const results = [];
       let idx = 0;
       async function next() {
@@ -108,7 +109,8 @@ export default async ({ req, res, log, error }) => {
     let updated = 0;
     let skipped = 0;
     let failed = 0;
-    const upsertResults = await batchProcess(dedupedItems, async (entry) => {
+    // If you ever receive a 429 error, consider adding retry logic here with exponential backoff.
+const upsertResults = await batchProcess(dedupedItems, async (entry) => {
       const name = entry.search_item;
       const price = entry.p50;
       if (!name || typeof price !== 'number') {
@@ -159,7 +161,7 @@ export default async ({ req, res, log, error }) => {
         error(`[populate-items] Failed to upsert ${name}: ${err.message}`);
         return { status: 'failed', name, error: err.message };
       }
-    }, 3, 500); // 3 concurrent, 500ms delay between batches
+    }, 8, 0); // 8 concurrent, 0ms delay between batches (optimized for server SDK)
 
     // Summarize results
     const summary = upsertResults.reduce((acc, r) => {

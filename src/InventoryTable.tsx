@@ -136,7 +136,15 @@ export default function InventoryTable({
       "att": "ATT",
       "matk": "Magic ATT",
       "ma": "Magic ATT",
+      "mag": "Magic",
       "wa": "ATT",
+      "oa": "Overall",
+      "1h": "One Handed",
+      "2h": "Two Handed",
+      "gfa": "Gloves for ATT",
+      "gfma": "Gloves for Magic ATT",
+      "cfa": "Claw for ATT",
+      "bwg": "Brown Work Gloves",
       "acc": "Accuracy",
       "avoid": "Avoidability",
       "hp": "HP",
@@ -157,13 +165,13 @@ export default function InventoryTable({
 
   const fuse = useMemo(() => new Fuse(filteredItems, {
     keys: ['name'],
-    threshold: 0.3,           // More forgiving for typos, but still relevant
+    threshold: 0.2,           // More forgiving for typos, but still relevant
     ignoreLocation: true,     // Allow substring matches anywhere
     minMatchCharLength: 2,    // Only match if at least 2 chars
     includeScore: true,       // Attach score to each result
     findAllMatches: true,     // Return all matches
     shouldSort: true,         // Sort by best match
-    useExtendedSearch: false  // Disable extended syntax for more natural behavior
+    useExtendedSearch: true  // Disable extended syntax for more natural behavior
   }), [filteredItems]);
 
   const validItems = useMemo(() => {
